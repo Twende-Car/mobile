@@ -5,6 +5,8 @@ import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
+import { HistoryDetailScreen } from '../screens/HistoryDetailScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -23,6 +25,8 @@ export const AppNavigator = () => {
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="Register" component={RegisterScreen} />
                 <Stack.Screen name="Home" component={HomeScreen} />
+                <Stack.Screen name="History" component={HistoryScreen} />
+                <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

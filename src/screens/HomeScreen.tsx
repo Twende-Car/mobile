@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput, TouchableOpacity } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -142,6 +142,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     style={[styles.roleBtn, userRole === 'driver' && styles.roleBtnActive]}
                     onPress={() => setUserRole('driver')}
                 >Driver</Text>
+                <TouchableOpacity
+                    style={styles.historyBtn}
+                    onPress={() => navigation.navigate('History')}
+                >
+                    <Text style={styles.historyText}>Historique</Text>
+                </TouchableOpacity>
             </View>
 
             <MapView
@@ -277,6 +283,18 @@ const styles = StyleSheet.create({
     roleBtnActive: {
         backgroundColor: theme.colors.primary,
         color: theme.colors.white
+    },
+    historyBtn: {
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        borderRadius: theme.borderRadius.round,
+        backgroundColor: theme.colors.secondary,
+        marginLeft: 5,
+    },
+    historyText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: theme.colors.primary,
     },
     map: {
         width: Dimensions.get('window').width,
