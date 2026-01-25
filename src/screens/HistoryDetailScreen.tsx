@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import api from '../constants/api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HistoryDetail'>;
 
@@ -13,22 +14,37 @@ export const HistoryDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Simulated ride details
-        setTimeout(() => {
-            setRide({
-                id: rideId,
-                status: 'COMPLETED',
-                date: '24 Janv 2026, 10:45',
-                fare: 12.50,
-                pickup: 'Gare du Nord, 18 Rue de Dunkerque, 75010 Paris',
-                destination: 'Eiffel Tower, Champ de Mars, 5 Av. Anatole France, 75007 Paris',
-                vehicle: 'Toyota Prius (Voiture)',
-                driver: { name: 'Mark Driver', phone: '+33 6 12 34 56 78', plate: 'AB-123-CD' },
-                duration: '15 min',
-                distance: '6.2 km'
-            });
-            setLoading(false);
-        }, 800);
+        async function fetchRideDetails() {
+            try {
+                const response = await api.get(`/rides/${rideId}`);
+                const data = response.data;
+
+                // Map API response to UI structure
+                setRide({
+                    id: data.id,
+                    status: data.status,
+                    date: new Date(data.createdAt).toLocaleString(),
+                    fare: data.fare || 0,
+                    pickup: data.pickupAddress || `${data.pickupLat}, ${data.pickupLng}`,
+                    destination: data.dropoffAddress || `${data.dropoffLat}, ${data.dropoffLng}`,
+                    vehicle: data.vehicleType?.name || 'Inconnu',
+                    driver: {
+                        name: data.driver?.name || 'Non assigné',
+                        phone: data.driver?.phoneNumber || 'N/A',
+                        plate: data.vehicleRegistration || data.driver?.vehiclePlate || 'N/A'
+                    },
+                    duration: data.endTime ? `${Math.round((new Date(data.endTime).getTime() - new Date(data.startTime).getTime()) / 60000)} min` : 'N/A',
+                    distance: data.distance ? `${data.distance.toFixed(1)} km` : 'N/A'
+                });
+            } catch (error) {
+                console.error(error);
+                Alert.alert('Erreur', 'Impossible de charger les détails de la course');
+                navigation.goBack();
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchRideDetails();
     }, [rideId]);
 
     if (loading) {
@@ -62,7 +78,7 @@ export const HistoryDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </View>
                     <View style={styles.row}>
                         <Text style={styles.label}>Prix:</Text>
-                        <Text style={[styles.value, styles.primary]}>{ride.fare.toFixed(2)}€</Text>
+                        <Text style={[styles.value, styles.primary]}>{ride.fare.toFixed(0)} Fc</Text>
                     </View>
                 </View>
 

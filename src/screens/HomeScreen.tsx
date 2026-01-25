@@ -38,8 +38,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [currentRide, setCurrentRide] = useState<any>(null);
     const [bidPrice, setBidPrice] = useState('');
     const [showBidModal, setShowBidModal] = useState(false);
+    const [showSelectionModal, setShowSelectionModal] = useState(false);
     const [selectedRideForBid, setSelectedRideForBid] = useState<any>(null);
     const [startConfirmed, setStartConfirmed] = useState(false);
+    const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
+    const [isEstimating, setIsEstimating] = useState(false);
 
     useEffect(() => {
         if (socket && location && userRole === 'driver') {
@@ -49,6 +52,29 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             });
         }
     }, [socket, location, userRole]);
+
+    useEffect(() => {
+        if (showSelectionModal && selectedVehicleType) {
+            handleEstimate();
+        }
+    }, [showSelectionModal, selectedVehicleType]);
+
+    const handleEstimate = async () => {
+        if (!selectedVehicleType) return;
+        setIsEstimating(true);
+        try {
+            // Simulated distance of 5km for demo
+            const response = await api.post('/rides/estimate', {
+                distance: 5,
+                vehicleTypeId: selectedVehicleType.id
+            });
+            setEstimatedFare(response.data.fare);
+        } catch (error) {
+            console.error("Erreur estimation", error);
+        } finally {
+            setIsEstimating(false);
+        }
+    };
 
     useEffect(() => {
         (async () => {
@@ -74,18 +100,41 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         })();
     }, []);
 
+    useEffect(() => {
+        if (userRole === 'driver') {
+            fetchPendingRides();
+        }
+    }, [userRole]);
+
+    const fetchPendingRides = async () => {
+        try {
+            const url = location
+                ? `/rides/available-rides?lat=${location.coords.latitude}&lng=${location.coords.longitude}`
+                : '/rides/available-rides';
+            const response = await api.get(url);
+            setPendingRides(response.data);
+        } catch (error) {
+            console.error("Erreur lors de la récupération des demandes", error);
+        }
+    };
+
     // Listen for socket events
     useEffect(() => {
         if (socket) {
             socket.on('newRideRequest', (ride) => {
                 if (userRole === 'driver') {
                     setPendingRides(prev => [...prev, ride]);
+                    Alert.alert(
+                        "Nouvelle demande",
+                        `Un passager (${ride.passengerName || 'Client'}) demande une course à ${ride.distanceToPickup?.toFixed(1) || '?'} km.`
+                    );
                 }
             });
 
             socket.on('rideRequested', (ride) => {
                 setCurrentRide(ride);
                 setRideOffers([]);
+                setShowSelectionModal(false);
             });
 
             socket.on('newOffer', (data) => {
@@ -155,7 +204,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             Alert.alert("Erreur", "Veuillez entrer une destination");
             return;
         }
+        setShowSelectionModal(true);
+    };
 
+    const confirmRideRequest = () => {
         if (socket && location) {
             socket.emit('requestRide', {
                 pickupLat: location.coords.latitude,
@@ -281,17 +333,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                 value={destination}
                                 onChangeText={setDestination}
                             />
-                            <View style={styles.vehicleRow}>
-                                {vehicleTypes.map(v => (
-                                    <Text
-                                        key={v.id}
-                                        style={[styles.vehicleTab, selectedVehicleType?.id === v.id && styles.vehicleTabActive]}
-                                        onPress={() => setSelectedVehicleType(v)}
-                                    >
-                                        {v.name}
-                                    </Text>
-                                ))}
-                            </View>
                             <Button
                                 title="Demander des offres"
                                 onPress={handleRequestRide}
@@ -315,7 +356,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                                     {item.driver.vehicleModel} • ⭐ {item.driver.rating}
                                                 </Text>
                                             </View>
-                                            <Text style={styles.fareText}>{item.offer.price}€</Text>
+                                            <Text style={styles.fareText}>{item.offer.price}Fc</Text>
                                             <Button
                                                 title="Accepter"
                                                 onPress={() => handleAcceptOffer(item.offer.id)}
@@ -335,7 +376,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                 {currentRide.status === 'ACCEPTED' ? 'Chauffeur en route' : 'Course en cours'}
                             </Text>
                             <View style={styles.rideDetail}>
-                                <Text><Text style={{ fontWeight: 'bold' }}>Prix:</Text> {currentRide.fare}€</Text>
+                                <Text><Text style={{ fontWeight: 'bold' }}>Prix:</Text> {currentRide.fare}Fc</Text>
                                 <Text><Text style={{ fontWeight: 'bold' }}>Véhicule:</Text> {currentRide.vehicleModel}</Text>
                             </View>
 
@@ -367,7 +408,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             ) : (
                                 pendingRides.map(ride => (
                                     <View key={ride.id} style={styles.rideItem}>
-                                        <Text style={{ flex: 1 }}>Vers: {ride.dropoffAddress}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontWeight: 'bold' }}>{ride.passengerName || ride.passenger?.name || 'Client'}</Text>
+                                            <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                                                Vers: {ride.dropoffAddress} • {ride.distanceToPickup?.toFixed(1) || '?'} km
+                                            </Text>
+                                        </View>
                                         <Button
                                             title="Proposer prix"
                                             onPress={() => {
@@ -384,6 +430,47 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
             </SafeAreaView>
 
+            {/* Selection Modal */}
+            {showSelectionModal && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Choisir le type de véhicule</Text>
+
+                        <View style={styles.vehicleRow}>
+                            {vehicleTypes.map(v => (
+                                <TouchableOpacity
+                                    key={v.id}
+                                    style={[styles.vehicleTab, selectedVehicleType?.id === v.id && styles.vehicleTabActive]}
+                                    onPress={() => setSelectedVehicleType(v)}
+                                >
+                                    <Text style={[styles.vehicleTabText, selectedVehicleType?.id === v.id && styles.vehicleTabTextActive]}>
+                                        {v.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {isEstimating ? (
+                            <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 20 }} />
+                        ) : (
+                            estimatedFare && (
+                                <View style={styles.fareContainer}>
+                                    <Text style={styles.fareText}>Estimation: {estimatedFare.toFixed(2)}Fc</Text>
+                                    <Text style={styles.disclaimerText}>
+                                        Attention : les prix réels peuvent différer suivant la proposition faite par le Driver.
+                                    </Text>
+                                </View>
+                            )
+                        )}
+
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+                            <Button title="Annuler" variant="outline" onPress={() => setShowSelectionModal(false)} style={{ flex: 1 }} />
+                            <Button title="Confirmer la demande" onPress={confirmRideRequest} style={{ flex: 1 }} />
+                        </View>
+                    </View>
+                </View>
+            )}
+
             {/* Bid Modal */}
             {showBidModal && (
                 <View style={styles.modalOverlay}>
@@ -392,7 +479,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         <Text style={{ marginBottom: 10 }}>Vers: {selectedRideForBid?.dropoffAddress}</Text>
                         <TextInput
                             style={styles.input}
-                            placeholder="Votre prix (€)"
+                            placeholder="Votre prix (Fc)"
                             keyboardType="numeric"
                             autoFocus
                             value={bidPrice}
@@ -506,22 +593,36 @@ const styles = StyleSheet.create({
         flex: 1,
         textAlign: 'center',
         marginHorizontal: 2,
-        fontSize: 12,
     },
     vehicleTabActive: {
         backgroundColor: theme.colors.primary,
-        color: theme.colors.white,
         borderColor: theme.colors.primary,
+    },
+    vehicleTabText: {
+        fontSize: 12,
+        color: theme.colors.text,
+        textAlign: 'center'
+    },
+    vehicleTabTextActive: {
+        color: theme.colors.white,
     },
     fareContainer: {
         alignItems: 'center',
-        marginVertical: theme.spacing.s
+        marginVertical: theme.spacing.m
     },
     fareText: {
         ...theme.textVariants.body,
         fontWeight: 'bold',
         color: theme.colors.primary,
-        marginHorizontal: 10
+        fontSize: 20,
+        marginBottom: 8
+    },
+    disclaimerText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        fontStyle: 'italic',
+        paddingHorizontal: 10
     },
     button: {
         marginTop: theme.spacing.s
@@ -562,7 +663,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'white',
         padding: 20,
         borderRadius: 12,
-        width: '80%'
+        width: '90%'
     },
     modalTitle: {
         fontSize: 18,

@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const response = await api.post('/auth/login', { email, password });
         const { token, user: userData } = response.data;
 
-        console.log(response.data);
+        console.log(response.data + " 23");
 
         await AsyncStorage.setItem('@Divocab:token', token);
         await AsyncStorage.setItem('@Divocab:user', JSON.stringify(userData));

@@ -33,13 +33,20 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => navigation.navigate('HistoryDetail', { rideId: item.id })}
         >
             <View style={styles.itemHeader}>
-                <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-                <Text style={[styles.status, item.status === 'CANCELLED' && styles.cancelled]}>
+                <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                <Text style={[styles.status, (item.status === 'CANCELLED' || item.status === 'REJECTED') && styles.cancelled]}>
                     {item.status}
                 </Text>
             </View>
-            <Text style={styles.route}>{item.pickupLat.toFixed(4)}, {item.pickupLng.toFixed(4)} ➔ {item.dropoffLat.toFixed(4)}, {item.dropoffLng.toFixed(4)}</Text>
-            <Text style={styles.fare}>{item.fare > 0 ? `${item.fare.toFixed(2)}€` : 'Annulée'}</Text>
+            <View style={styles.routeContainer}>
+                <Text style={styles.addressLabel}>De: </Text>
+                <Text style={styles.route} numberOfLines={1}>{item.pickupAddress || `${item.pickupLat.toFixed(4)}, ${item.pickupLng.toFixed(4)}`}</Text>
+            </View>
+            <View style={styles.routeContainer}>
+                <Text style={styles.addressLabel}>Vers: </Text>
+                <Text style={styles.route} numberOfLines={1}>{item.dropoffAddress || `${item.dropoffLat.toFixed(4)}, ${item.dropoffLng.toFixed(4)}`}</Text>
+            </View>
+            <Text style={styles.fare}>{item.fare > 0 ? `${item.fare.toFixed(0)} Fc` : 'N/A'}</Text>
         </TouchableOpacity>
     );
 
@@ -121,16 +128,28 @@ const styles = StyleSheet.create({
     cancelled: {
         color: theme.colors.error,
     },
+    routeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 2,
+    },
+    addressLabel: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: theme.colors.textSecondary,
+        width: 35,
+    },
     route: {
         ...theme.textVariants.body,
-        fontSize: 12,
-        marginBottom: theme.spacing.s,
+        fontSize: 13,
+        flex: 1,
     },
     fare: {
         ...theme.textVariants.body,
         fontWeight: 'bold',
         color: theme.colors.primary,
         textAlign: 'right',
+        marginTop: theme.spacing.s,
     },
     empty: {
         textAlign: 'center',
