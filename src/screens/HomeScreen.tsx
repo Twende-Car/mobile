@@ -9,6 +9,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import api from '../constants/api';
 
 // Mock drivers for visualization if none connected
 const MOCK_DRIVERS = [
@@ -29,6 +30,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [fare, setFare] = useState<number | null>(null);
     const [userRole, setUserRole] = useState<'client' | 'driver'>(authUser?.role || 'client');
     const [pendingRides, setPendingRides] = useState<any[]>([]);
+    const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
+    const [selectedVehicleType, setSelectedVehicleType] = useState<any>(null);
 
     useEffect(() => {
         if (socket && location && userRole === 'driver') {
@@ -50,16 +53,39 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             let location = await Location.getCurrentPositionAsync({});
             setLocation(location);
         })();
+
+        // Fetch vehicle types
+        (async () => {
+            try {
+                const response = await api.get('/admin/vehicle-types');
+                setVehicleTypes(response.data);
+                if (response.data.length > 0) setSelectedVehicleType(response.data[0]);
+            } catch (error) {
+                console.error("Erreur lors de la récupération des types de véhicules", error);
+            }
+        })();
     }, []);
 
     useEffect(() => {
-        if (destination && vehicleType) {
-            // Simulate fare calculation: Base price * multiplier
-            const basePrice = 5;
-            const multipliers = { Voiture: 1, Moto: 0.7, Luxe: 2 };
-            setFare(basePrice * multipliers[vehicleType]);
+        if (destination && selectedVehicleType) {
+            // In a real app, you would calculate actual distance here
+            // using a service like Google Matrix API.
+            // For now, let's simulate a 5km distance.
+            const distance = 5;
+
+            (async () => {
+                try {
+                    const response = await api.post('/rides/estimate', {
+                        distance,
+                        vehicleTypeId: selectedVehicleType.id
+                    });
+                    setFare(response.data.fare);
+                } catch (error) {
+                    console.error("Erreur estimation prix", error);
+                }
+            })();
         }
-    }, [destination, vehicleType]);
+    }, [destination, selectedVehicleType]);
 
     // Listen for socket events
     useEffect(() => {
@@ -72,8 +98,15 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 }
             });
 
-            socket.on('rideAccepted', (ride) => {
-                Alert.alert("Course Acceptée", "Votre chauffeur est en route !");
+            socket.on('rideAccepted', (data) => {
+                const { driver } = data;
+                Alert.alert(
+                    "Course Acceptée",
+                    `Votre chauffeur ${driver.name} est en route !\n\n` +
+                    `Véhicule: ${driver.vehicleModel} (${driver.vehicleColor})\n` +
+                    `Immatriculation: ${driver.vehicleRegistration}\n` +
+                    `Contact: ${driver.phoneNumber}`
+                );
             });
 
             socket.on('rideCancelled', () => {
@@ -109,7 +142,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
         Alert.alert(
             "Confirmer la course",
-            `Détails:\nVéhicule: ${vehicleType}\nPrix: ${fare?.toFixed(2)}€\nChauffeur: ${selectedDriver.name}`,
+            `Détails:\nVéhicule: ${selectedVehicleType?.name}\nPrix: ${fare?.toFixed(2)}€\nChauffeur: ${selectedDriver.name}`,
             [
                 { text: "Annuler", style: "cancel" },
                 {
@@ -119,9 +152,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                 driverId: selectedDriver.id,
                                 pickupLat: location.coords.latitude,
                                 pickupLng: location.coords.longitude,
-                                dropoffLat: location.coords.latitude + 0.01, // Mock
+                                dropoffLat: location.coords.latitude + 0.01,
                                 dropoffLng: location.coords.longitude + 0.01,
-                                vehicleType,
+                                pickupAddress: pickup,
+                                dropoffAddress: destination,
+                                distance: 5,
+                                vehicleTypeId: selectedVehicleType?.id,
                                 fare
                             });
                             Alert.alert("Succès", "Demande envoyée au chauffeur.");
@@ -218,13 +254,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             />
 
                             <View style={styles.vehicleRow}>
-                                {(['Voiture', 'Moto', 'Luxe'] as const).map(v => (
+                                {vehicleTypes.map(v => (
                                     <Text
-                                        key={v}
-                                        style={[styles.vehicleTab, vehicleType === v && styles.vehicleTabActive]}
-                                        onPress={() => setVehicleType(v)}
+                                        key={v.id}
+                                        style={[styles.vehicleTab, selectedVehicleType?.id === v.id && styles.vehicleTabActive]}
+                                        onPress={() => setSelectedVehicleType(v)}
                                     >
-                                        {v}
+                                        {v.name}
                                     </Text>
                                 ))}
                             </View>
