@@ -5,6 +5,7 @@ import { Button } from '../components/Button';
 import { theme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -12,15 +13,22 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const { login } = useAuth();
 
     const handleLogin = async () => {
-        // Placeholder for API call
+        if (!email || !password) {
+            return Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+        }
+
         setLoading(true);
-        setTimeout(() => {
+        try {
+            await login(email, password);
+        } catch (error: any) {
+            console.log(error);
+            Alert.alert('Erreur', error.response?.data?.message || 'Identifiants invalides');
+        } finally {
             setLoading(false);
-            // navigation.navigate('Home', { role: 'client' }); // Need to update types if passing params
-            navigation.navigate('Home');
-        }, 1000);
+        }
     };
 
     return (

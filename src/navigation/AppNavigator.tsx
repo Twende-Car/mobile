@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { View, ActivityIndicator } from 'react-native';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
@@ -8,14 +9,26 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { HistoryDetailScreen } from '../screens/HistoryDetailScreen';
 import { RootStackParamList } from './types';
+import { useAuth } from '../context/AuthContext';
+import { theme } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
+    const { loading, token } = useAuth();
+
+    if (loading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+        );
+    }
+
     return (
         <NavigationContainer>
             <Stack.Navigator
-                initialRouteName="Onboarding"
+                initialRouteName={token ? "Home" : "Onboarding"}
                 screenOptions={{
                     headerShown: false,
                     contentStyle: { backgroundColor: '#FFFFFF' }

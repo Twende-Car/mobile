@@ -5,11 +5,13 @@ import { Button } from '../components/Button';
 import { theme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 export const RegisterScreen: React.FC<Props> = ({ route, navigation }) => {
     const { role } = route.params;
+    const { register } = useAuth();
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -22,11 +24,25 @@ export const RegisterScreen: React.FC<Props> = ({ route, navigation }) => {
     const [plateNumber, setPlateNumber] = useState('');
 
     const handleRegister = async () => {
+        if (!name || !email || !password || !phoneNumber) {
+            return Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+        }
+
         setLoading(true);
-        setTimeout(() => {
+        try {
+            await register({
+                name,
+                email,
+                password,
+                phoneNumber,
+                role,
+                vehicleInfo: role === 'driver' ? { vehicleModel, plateNumber } : null
+            });
+        } catch (error: any) {
+            Alert.alert('Erreur', error.response?.data?.message || 'Erreur lors de l’inscription');
+        } finally {
             setLoading(false);
-            navigation.navigate('Home');
-        }, 1000);
+        }
     };
 
     return (

@@ -5,20 +5,21 @@ import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { Button } from '../components/Button';
-import { useSocket } from '../context/SocketContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 
-// Mock driver data until backend connected fully
+// Mock drivers for visualization if none connected
 const MOCK_DRIVERS = [
-    { id: '1', lat: 37.78825, lng: -122.4324, title: 'Driver 1' },
-    { id: '2', lat: 37.78865, lng: -122.4354, title: 'Driver 2' }
+    { id: '1', lat: 37.78825, lng: -122.4324, title: 'Driver Prototype 1' },
 ];
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const { socket, isConnected } = useSocket();
+    const { user: authUser, logout } = useAuth();
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [pickup, setPickup] = useState('Position actuelle');
@@ -26,8 +27,17 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [vehicleType, setVehicleType] = useState<'Voiture' | 'Moto' | 'Luxe'>('Voiture');
     const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
     const [fare, setFare] = useState<number | null>(null);
-    const [userRole, setUserRole] = useState<'client' | 'driver'>('client');
+    const [userRole, setUserRole] = useState<'client' | 'driver'>(authUser?.role || 'client');
     const [pendingRides, setPendingRides] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (socket && location && userRole === 'driver') {
+            socket.emit('updateLocation', {
+                lat: location.coords.latitude,
+                lng: location.coords.longitude
+            });
+        }
+    }, [socket, location, userRole]);
 
     useEffect(() => {
         (async () => {
@@ -146,7 +156,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     style={styles.historyBtn}
                     onPress={() => navigation.navigate('History')}
                 >
-                    <Text style={styles.historyText}>Historique</Text>
+                    <Text style={styles.historyText}>Hist.</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.historyBtn, { backgroundColor: theme.colors.error }]}
+                    onPress={logout}
+                >
+                    <Text style={[styles.historyText, { color: 'white' }]}>Off</Text>
                 </TouchableOpacity>
             </View>
 

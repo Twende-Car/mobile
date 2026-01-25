@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import axios from 'axios';
+import api from '../constants/api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
 
@@ -13,15 +13,18 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Simulated history data for now
-        setTimeout(() => {
-            setHistory([
-                { id: '1', status: 'COMPLETED', date: '2026-01-24', fare: 12.50, pickup: 'Gare du Nord', destination: 'Eiffel Tower' },
-                { id: '2', status: 'COMPLETED', date: '2026-01-23', fare: 8.20, pickup: 'Louvre Museum', destination: 'Notre Dame' },
-                { id: '3', status: 'CANCELLED', date: '2026-01-22', fare: 0, pickup: 'Montmartre', destination: 'Orly Airport' },
-            ]);
-            setLoading(false);
-        }, 1000);
+        async function fetchHistory() {
+            try {
+                const response = await api.get('/rides/history');
+                setHistory(response.data);
+            } catch (error) {
+                console.log(error);
+                Alert.alert('Erreur', 'Impossible de récupérer l’historique');
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchHistory();
     }, []);
 
     const renderItem = ({ item }: { item: any }) => (
@@ -30,12 +33,12 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => navigation.navigate('HistoryDetail', { rideId: item.id })}
         >
             <View style={styles.itemHeader}>
-                <Text style={styles.date}>{item.date}</Text>
+                <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 <Text style={[styles.status, item.status === 'CANCELLED' && styles.cancelled]}>
                     {item.status}
                 </Text>
             </View>
-            <Text style={styles.route}>{item.pickup} ➔ {item.destination}</Text>
+            <Text style={styles.route}>{item.pickupLat.toFixed(4)}, {item.pickupLng.toFixed(4)} ➔ {item.dropoffLat.toFixed(4)}, {item.dropoffLng.toFixed(4)}</Text>
             <Text style={styles.fare}>{item.fare > 0 ? `${item.fare.toFixed(2)}€` : 'Annulée'}</Text>
         </TouchableOpacity>
     );
@@ -120,7 +123,7 @@ const styles = StyleSheet.create({
     },
     route: {
         ...theme.textVariants.body,
-        fontSize: 14,
+        fontSize: 12,
         marginBottom: theme.spacing.s,
     },
     fare: {
