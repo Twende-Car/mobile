@@ -8,6 +8,7 @@ interface AuthContextData {
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
     register: (userData: any) => Promise<void>;
+    registerDriver: (formData: FormData) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -60,6 +61,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const registerDriver = async (formData: FormData) => {
+        const response = await api.post('/auth/register-driver', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        // We don't automatically login drivers because they need approval
+        return response.data;
+    };
+
     const logout = async () => {
         await AsyncStorage.multiRemove(['@Divocab:token', '@Divocab:user']);
         setToken(null);
@@ -67,7 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, token, loading, login, register, registerDriver, logout }}>
             {children}
         </AuthContext.Provider>
     );

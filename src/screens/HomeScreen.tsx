@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,6 +32,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [pendingRides, setPendingRides] = useState<any[]>([]);
     const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
     const [selectedVehicleType, setSelectedVehicleType] = useState<any>(null);
+
+    // Bidding Flow State
+    const [rideOffers, setRideOffers] = useState<any[]>([]);
+    const [currentRide, setCurrentRide] = useState<any>(null);
+    const [bidPrice, setBidPrice] = useState('');
+    const [showBidModal, setShowBidModal] = useState(false);
+    const [selectedRideForBid, setSelectedRideForBid] = useState<any>(null);
+    const [startConfirmed, setStartConfirmed] = useState(false);
 
     useEffect(() => {
         if (socket && location && userRole === 'driver') {
@@ -66,68 +74,81 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         })();
     }, []);
 
-    useEffect(() => {
-        if (destination && selectedVehicleType) {
-            // In a real app, you would calculate actual distance here
-            // using a service like Google Matrix API.
-            // For now, let's simulate a 5km distance.
-            const distance = 5;
-
-            (async () => {
-                try {
-                    const response = await api.post('/rides/estimate', {
-                        distance,
-                        vehicleTypeId: selectedVehicleType.id
-                    });
-                    setFare(response.data.fare);
-                } catch (error) {
-                    console.error("Erreur estimation prix", error);
-                }
-            })();
-        }
-    }, [destination, selectedVehicleType]);
-
     // Listen for socket events
     useEffect(() => {
         if (socket) {
             socket.on('newRideRequest', (ride) => {
                 if (userRole === 'driver') {
                     setPendingRides(prev => [...prev, ride]);
-                } else {
-                    Alert.alert("Nouvelle demande de course", "Un chauffeur a peut-être reçu votre demande");
                 }
             });
 
-            socket.on('rideAccepted', (data) => {
-                const { driver } = data;
+            socket.on('rideRequested', (ride) => {
+                setCurrentRide(ride);
+                setRideOffers([]);
+            });
+
+            socket.on('newOffer', (data) => {
+                // data: { offer, driver }
+                setRideOffers(prev => [...prev, data]);
+            });
+
+            socket.on('offerAccepted', (data) => {
+                const { ride } = data;
+                setCurrentRide(ride);
+                setStartConfirmed(false);
+                Alert.alert("Offre acceptée", "Le client a accepté votre offre ! Rendez-vous au point de départ.");
+            });
+
+            socket.on('rideAcceptedSuccess', (data) => {
+                const { ride, driver } = data;
+                setCurrentRide(ride);
+                setStartConfirmed(false);
                 Alert.alert(
-                    "Course Acceptée",
-                    `Votre chauffeur ${driver.name} est en route !\n\n` +
-                    `Véhicule: ${driver.vehicleModel} (${driver.vehicleColor})\n` +
-                    `Immatriculation: ${driver.vehicleRegistration}\n` +
-                    `Contact: ${driver.phoneNumber}`
+                    "Course Confirmée",
+                    `Le chauffeur ${driver.name} arrive !\n` +
+                    `Véhicule: ${ride.vehicleModel} (${ride.vehicleColor})`
                 );
+            });
+
+            socket.on('startConfirmed', (data) => {
+                const { by, ride } = data;
+                setCurrentRide(ride);
+                if (by === userRole) {
+                    setStartConfirmed(true);
+                }
+            });
+
+            socket.on('rideStarted', (ride) => {
+                setCurrentRide(ride);
+                Alert.alert("Course démarrée", "Bon voyage !");
             });
 
             socket.on('rideCancelled', () => {
                 Alert.alert("Annulation", "La course a été annulée");
+                setCurrentRide(null);
                 setPendingRides([]);
+                setRideOffers([]);
+            });
+
+            socket.on('rideCompleted', (ride) => {
+                Alert.alert("Terminé", "La course est terminée.");
+                setCurrentRide(null);
+                setRideOffers([]);
             });
         }
         return () => {
             socket?.off('newRideRequest');
-            socket?.off('rideAccepted');
+            socket?.off('rideRequested');
+            socket?.off('newOffer');
+            socket?.off('offerAccepted');
+            socket?.off('rideAcceptedSuccess');
+            socket?.off('startConfirmed');
+            socket?.off('rideStarted');
             socket?.off('rideCancelled');
+            socket?.off('rideCompleted');
         };
     }, [socket, userRole]);
-
-    const handleAcceptRide = (rideId: string) => {
-        if (socket) {
-            socket.emit('acceptRide', { rideId });
-            setPendingRides(prev => prev.filter(r => r.id !== rideId));
-            Alert.alert("Succès", "Vous avez accepté la course !");
-        }
-    };
 
     const handleRequestRide = () => {
         if (!destination) {
@@ -135,37 +156,53 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             return;
         }
 
-        if (!selectedDriver) {
-            Alert.alert("Sélection", "Veuillez sélectionner un chauffeur sur la carte");
-            return;
+        if (socket && location) {
+            socket.emit('requestRide', {
+                pickupLat: location.coords.latitude,
+                pickupLng: location.coords.longitude,
+                dropoffLat: location.coords.latitude + 0.01,
+                dropoffLng: location.coords.longitude + 0.01,
+                pickupAddress: pickup,
+                dropoffAddress: destination,
+                distance: 5,
+                vehicleTypeId: selectedVehicleType?.id,
+            });
+            Alert.alert("Succès", "Demande envoyée. Attente des offres des chauffeurs...");
         }
+    };
 
-        Alert.alert(
-            "Confirmer la course",
-            `Détails:\nVéhicule: ${selectedVehicleType?.name}\nPrix: ${fare?.toFixed(2)}€\nChauffeur: ${selectedDriver.name}`,
-            [
-                { text: "Annuler", style: "cancel" },
-                {
-                    text: "Confirmer", onPress: () => {
-                        if (socket && location) {
-                            socket.emit('requestRide', {
-                                driverId: selectedDriver.id,
-                                pickupLat: location.coords.latitude,
-                                pickupLng: location.coords.longitude,
-                                dropoffLat: location.coords.latitude + 0.01,
-                                dropoffLng: location.coords.longitude + 0.01,
-                                pickupAddress: pickup,
-                                dropoffAddress: destination,
-                                distance: 5,
-                                vehicleTypeId: selectedVehicleType?.id,
-                                fare
-                            });
-                            Alert.alert("Succès", "Demande envoyée au chauffeur.");
-                        }
-                    }
-                }
-            ]
-        );
+    const handleAcceptOffer = (offerId: string) => {
+        if (socket) {
+            socket.emit('acceptOffer', { offerId });
+        }
+    };
+
+    const handleSubmitOffer = () => {
+        if (!bidPrice || isNaN(Number(bidPrice))) {
+            return Alert.alert("Erreur", "Veuillez entrer un prix valide");
+        }
+        if (socket && selectedRideForBid) {
+            socket.emit('submitOffer', {
+                rideId: selectedRideForBid.id,
+                price: Number(bidPrice)
+            });
+            setPendingRides(prev => prev.filter(r => r.id !== selectedRideForBid.id));
+            setShowBidModal(false);
+            setBidPrice('');
+            Alert.alert("Succès", "Offre envoyée !");
+        }
+    };
+
+    const handleConfirmStart = () => {
+        if (socket && currentRide) {
+            socket.emit('confirmStart', { rideId: currentRide.id });
+        }
+    };
+
+    const handleCompleteRide = () => {
+        if (socket && currentRide) {
+            socket.emit('completeRide', { rideId: currentRide.id });
+        }
     };
 
     if (!location) {
@@ -212,34 +249,26 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 }}
                 showsUserLocation
             >
-                {userRole === 'client' && MOCK_DRIVERS.map(driver => (
-                    <Marker
-                        key={driver.id}
-                        coordinate={{ latitude: driver.lat, longitude: driver.lng }}
-                        title={driver.title}
-                        description="Disponible"
-                        pinColor={selectedDriver?.id === driver.id ? theme.colors.primary : 'blue'}
-                        onPress={() => setSelectedDriver({ id: driver.id, name: driver.title })}
-                    />
-                ))}
-
                 {userRole === 'driver' && pendingRides.map(ride => (
                     <Marker
                         key={ride.id}
                         coordinate={{ latitude: ride.pickupLat, longitude: ride.pickupLng }}
-                        title={`Passager: ${ride.passengerName || 'Client'}`}
-                        description={`Prix: ${ride.fare}€`}
+                        title="Nouveau passager"
                         pinColor="green"
+                        onPress={() => {
+                            setSelectedRideForBid(ride);
+                            setShowBidModal(true);
+                        }}
                     />
                 ))}
             </MapView>
 
             <SafeAreaView style={styles.overlay} pointerEvents="box-none">
                 <View style={styles.card}>
-                    <Text style={styles.title}>{userRole === 'client' ? 'Où allez-vous ?' : 'Demandes en attente'}</Text>
-
-                    {userRole === 'client' ? (
+                    {/* Passenger Flow */}
+                    {userRole === 'client' && !currentRide && (
                         <>
+                            <Text style={styles.title}>Où allez-vous ?</Text>
                             <TextInput
                                 style={styles.input}
                                 placeholder="Départ"
@@ -252,7 +281,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                 value={destination}
                                 onChangeText={setDestination}
                             />
-
                             <View style={styles.vehicleRow}>
                                 {vehicleTypes.map(v => (
                                     <Text
@@ -264,31 +292,88 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     </Text>
                                 ))}
                             </View>
-
-                            {fare && (
-                                <View style={styles.fareContainer}>
-                                    <Text style={styles.fareText}>Prix estimé: {fare.toFixed(2)}€</Text>
-                                </View>
-                            )}
-
                             <Button
-                                title={selectedDriver ? `Commander (${selectedDriver.name})` : "Sélectionner un Chauffeur"}
+                                title="Demander des offres"
                                 onPress={handleRequestRide}
                                 style={styles.button}
-                                variant={selectedDriver ? 'primary' : 'outline'}
                             />
                         </>
-                    ) : (
+                    )}
+
+                    {userRole === 'client' && currentRide?.status === 'REQUESTED' && (
+                        <>
+                            <Text style={styles.title}>Offres reçues ({rideOffers.length})</Text>
+                            <ScrollView style={{ maxHeight: 200 }}>
+                                {rideOffers.length === 0 ? (
+                                    <Text style={styles.emptyText}>Attente des chauffeurs...</Text>
+                                ) : (
+                                    rideOffers.map((item, idx) => (
+                                        <View key={idx} style={styles.rideItem}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ fontWeight: 'bold' }}>{item.driver.name}</Text>
+                                                <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                                                    {item.driver.vehicleModel} • ⭐ {item.driver.rating}
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.fareText}>{item.offer.price}€</Text>
+                                            <Button
+                                                title="Accepter"
+                                                onPress={() => handleAcceptOffer(item.offer.id)}
+                                                style={styles.smallButton}
+                                            />
+                                        </View>
+                                    ))
+                                )}
+                            </ScrollView>
+                        </>
+                    )}
+
+                    {/* Start Confirmation Flow */}
+                    {currentRide && (currentRide.status === 'ACCEPTED' || currentRide.status === 'IN_PROGRESS') && (
                         <View>
+                            <Text style={styles.title}>
+                                {currentRide.status === 'ACCEPTED' ? 'Chauffeur en route' : 'Course en cours'}
+                            </Text>
+                            <View style={styles.rideDetail}>
+                                <Text><Text style={{ fontWeight: 'bold' }}>Prix:</Text> {currentRide.fare}€</Text>
+                                <Text><Text style={{ fontWeight: 'bold' }}>Véhicule:</Text> {currentRide.vehicleModel}</Text>
+                            </View>
+
+                            {currentRide.status === 'ACCEPTED' && (
+                                <Button
+                                    title={startConfirmed ? "Attente de l'autre partie..." : "Lancer la course"}
+                                    onPress={handleConfirmStart}
+                                    disabled={startConfirmed}
+                                    style={styles.button}
+                                />
+                            )}
+
+                            {currentRide.status === 'IN_PROGRESS' && userRole === 'driver' && (
+                                <Button
+                                    title="Terminer la course"
+                                    onPress={handleCompleteRide}
+                                    style={styles.button}
+                                />
+                            )}
+                        </View>
+                    )}
+
+                    {/* Driver Flow - Pending Request List */}
+                    {userRole === 'driver' && !currentRide && (
+                        <View>
+                            <Text style={styles.title}>Demandes à proximité</Text>
                             {pendingRides.length === 0 ? (
-                                <Text style={styles.emptyText}>Aucune demande pour le moment...</Text>
+                                <Text style={styles.emptyText}>Aucune demande...</Text>
                             ) : (
                                 pendingRides.map(ride => (
                                     <View key={ride.id} style={styles.rideItem}>
-                                        <Text style={styles.rideText}>Client: {ride.passengerName || 'Client'} - {ride.fare}€</Text>
+                                        <Text style={{ flex: 1 }}>Vers: {ride.dropoffAddress}</Text>
                                         <Button
-                                            title="Accepter"
-                                            onPress={() => handleAcceptRide(ride.id)}
+                                            title="Proposer prix"
+                                            onPress={() => {
+                                                setSelectedRideForBid(ride);
+                                                setShowBidModal(true);
+                                            }}
                                             style={styles.smallButton}
                                         />
                                     </View>
@@ -298,6 +383,28 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     )}
                 </View>
             </SafeAreaView>
+
+            {/* Bid Modal */}
+            {showBidModal && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Proposer un prix</Text>
+                        <Text style={{ marginBottom: 10 }}>Vers: {selectedRideForBid?.dropoffAddress}</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Votre prix (€)"
+                            keyboardType="numeric"
+                            autoFocus
+                            value={bidPrice}
+                            onChangeText={setBidPrice}
+                        />
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <Button title="Annuler" variant="outline" onPress={() => setShowBidModal(false)} style={{ flex: 1 }} />
+                            <Button title="Envoyer" onPress={handleSubmitOffer} style={{ flex: 1 }} />
+                        </View>
+                    </View>
+                </View>
+            )}
         </View>
     );
 };
@@ -413,7 +520,8 @@ const styles = StyleSheet.create({
     fareText: {
         ...theme.textVariants.body,
         fontWeight: 'bold',
-        color: theme.colors.primary
+        color: theme.colors.primary,
+        marginHorizontal: 10
     },
     button: {
         marginTop: theme.spacing.s
@@ -431,13 +539,35 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.inputBackground
     },
-    rideText: {
-        fontSize: 14,
-        flex: 1
+    rideDetail: {
+        backgroundColor: theme.colors.inputBackground,
+        padding: 10,
+        borderRadius: 8,
+        marginBottom: 10
     },
     smallButton: {
         width: 'auto',
         paddingVertical: 5,
         paddingHorizontal: 15
+    },
+    modalOverlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 100
+    },
+    modalContent: {
+        backgroundColor: 'white',
+        padding: 20,
+        borderRadius: 12,
+        width: '80%'
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 15,
+        textAlign: 'center'
     }
 });
