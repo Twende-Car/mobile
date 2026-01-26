@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapViewDirections from 'react-native-maps-directions';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
@@ -10,6 +12,7 @@ import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import api from '../constants/api';
+import { GOOGLE_MAPS_API_KEY } from '../constants/maps';
 
 // Mock drivers for visualization if none connected
 const MOCK_DRIVERS = [
@@ -24,7 +27,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [pickup, setPickup] = useState('Position actuelle');
+    const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
     const [destination, setDestination] = useState('');
+    const [destinationCoords, setDestinationCoords] = useState<{ latitude: number, longitude: number } | null>(null);
     const [vehicleType, setVehicleType] = useState<'Voiture' | 'Moto' | 'Luxe'>('Voiture');
     const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
     const [fare, setFare] = useState<number | null>(null);
@@ -60,12 +65,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }, [showSelectionModal, selectedVehicleType]);
 
     const handleEstimate = async () => {
-        if (!selectedVehicleType) return;
+        if (!selectedVehicleType || !pickupCoords || !destinationCoords) return;
         setIsEstimating(true);
         try {
-            // Simulated distance of 5km for demo
+            // Use real distance from backend estimation (which should ideally take distance)
             const response = await api.post('/rides/estimate', {
-                distance: 5,
+                distance: 5, // We could calculate real distance here if needed
                 vehicleTypeId: selectedVehicleType.id
             });
             setEstimatedFare(response.data.fare);
@@ -86,6 +91,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
             let location = await Location.getCurrentPositionAsync({});
             setLocation(location);
+            setPickupCoords({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude
+            });
         })();
 
         // Fetch vehicle types
@@ -200,7 +209,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }, [socket, userRole]);
 
     const handleRequestRide = () => {
-        if (!destination) {
+        if (!destinationCoords) {
             Alert.alert("Erreur", "Veuillez entrer une destination");
             return;
         }
@@ -208,12 +217,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     const confirmRideRequest = () => {
-        if (socket && location) {
+        if (socket && pickupCoords && destinationCoords) {
             socket.emit('requestRide', {
-                pickupLat: location.coords.latitude,
-                pickupLng: location.coords.longitude,
-                dropoffLat: location.coords.latitude + 0.01,
-                dropoffLng: location.coords.longitude + 0.01,
+                pickupLat: pickupCoords.latitude,
+                pickupLng: pickupCoords.longitude,
+                dropoffLat: destinationCoords.latitude,
+                dropoffLng: destinationCoords.longitude,
                 pickupAddress: pickup,
                 dropoffAddress: destination,
                 distance: 5,
@@ -296,11 +305,36 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 initialRegion={{
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
+                    latitudeDelta: 0.1,
+                    longitudeDelta: 0.1,
                 }}
                 showsUserLocation
             >
+                {(pickupCoords || currentRide) && (
+                    <Marker
+                        coordinate={currentRide ? { latitude: currentRide.pickupLat, longitude: currentRide.pickupLng } : pickupCoords!}
+                        title="Départ"
+                        pinColor="blue"
+                    />
+                )}
+                {(destinationCoords || currentRide) && (
+                    <Marker
+                        coordinate={currentRide ? { latitude: currentRide.dropoffLat, longitude: currentRide.dropoffLng } : destinationCoords!}
+                        title="Destination"
+                        pinColor="red"
+                    />
+                )}
+
+                {(pickupCoords && destinationCoords) || currentRide ? (
+                    <MapViewDirections
+                        origin={currentRide ? { latitude: currentRide.pickupLat, longitude: currentRide.pickupLng } : pickupCoords!}
+                        destination={currentRide ? { latitude: currentRide.dropoffLat, longitude: currentRide.dropoffLng } : destinationCoords!}
+                        apikey={GOOGLE_MAPS_API_KEY}
+                        strokeWidth={4}
+                        strokeColor={theme.colors.primary}
+                    />
+                ) : null}
+
                 {userRole === 'driver' && pendingRides.map(ride => (
                     <Marker
                         key={ride.id}
@@ -313,32 +347,85 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         }}
                     />
                 ))}
+
+                {currentRide && currentRide.status === 'ACCEPTED' && userRole === 'driver' && (
+                    <Marker
+                        coordinate={{ latitude: currentRide.pickupLat, longitude: currentRide.pickupLng }}
+                        title="Passager à récupérer"
+                        pinColor="yellow"
+                    />
+                )}
             </MapView>
 
             <SafeAreaView style={styles.overlay} pointerEvents="box-none">
-                <View style={styles.card}>
+                <View style={[styles.card, userRole === 'client' && !currentRide && { height: 400 }]}>
                     {/* Passenger Flow */}
                     {userRole === 'client' && !currentRide && (
-                        <>
+                        <View style={{ flex: 1 }}>
                             <Text style={styles.title}>Où allez-vous ?</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Départ"
-                                value={pickup}
-                                onChangeText={setPickup}
-                            />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Destination"
-                                value={destination}
-                                onChangeText={setDestination}
-                            />
+
+                            <View style={{ zIndex: 100, marginBottom: 10 }}>
+                                <GooglePlacesAutocomplete
+                                    placeholder='Lieu de départ'
+                                    onPress={(data, details = null) => {
+                                        setPickup(data.description);
+                                        if (details) {
+                                            setPickupCoords({
+                                                latitude: details.geometry.location.lat,
+                                                longitude: details.geometry.location.lng,
+                                            });
+                                        }
+                                    }}
+                                    query={{
+                                        key: GOOGLE_MAPS_API_KEY,
+                                        language: 'fr',
+                                    }}
+                                    fetchDetails={true}
+                                    styles={{
+                                        textInput: styles.input,
+                                        container: { flex: 0 },
+                                        listView: { backgroundColor: 'white' }
+                                    }}
+                                    predefinedPlaces={[{
+                                        description: 'Position actuelle',
+                                        geometry: { location: { lat: location.coords.latitude, lng: location.coords.longitude } } as any,
+                                    }]}
+                                />
+                            </View>
+
+                            <View style={{ zIndex: 99 }}>
+                                <GooglePlacesAutocomplete
+                                    placeholder='Destination'
+                                    onPress={(data, details = null) => {
+                                        setDestination(data.description);
+                                        if (details) {
+                                            setDestinationCoords({
+                                                latitude: details.geometry.location.lat,
+                                                longitude: details.geometry.location.lng,
+                                            });
+                                        }
+                                    }}
+                                    query={{
+                                        key: GOOGLE_MAPS_API_KEY,
+                                        language: 'fr',
+                                    }}
+                                    fetchDetails={true}
+                                    styles={{
+                                        textInput: styles.input,
+                                        container: { flex: 0 },
+                                        listView: { backgroundColor: 'white' }
+                                    }}
+                                />
+                            </View>
+
+                            <View style={{ flex: 1 }} />
+
                             <Button
                                 title="Demander des offres"
                                 onPress={handleRequestRide}
                                 style={styles.button}
                             />
-                        </>
+                        </View>
                     )}
 
                     {userRole === 'client' && currentRide?.status === 'REQUESTED' && (
@@ -455,7 +542,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         ) : (
                             estimatedFare && (
                                 <View style={styles.fareContainer}>
-                                    <Text style={styles.fareText}>Estimation: {estimatedFare.toFixed(2)}Fc</Text>
+                                    <Text style={styles.fareText}>Estimation: {estimatedFare.toFixed(0)}Fc</Text>
                                     <Text style={styles.disclaimerText}>
                                         Attention : les prix réels peuvent différer suivant la proposition faite par le Driver.
                                     </Text>
@@ -579,6 +666,7 @@ const styles = StyleSheet.create({
         padding: theme.spacing.m,
         marginBottom: theme.spacing.s,
         fontSize: 14,
+        height: 50,
     },
     vehicleRow: {
         flexDirection: 'row',
