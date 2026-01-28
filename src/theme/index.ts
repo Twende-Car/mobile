@@ -1,10 +1,10 @@
 export const theme = {
     colors: {
-        primary: '#E63946', // Red color theme
-        secondary: '#F1FAEE',
+        primary: '#0D9488', // Teal color theme
+        secondary: '#F0FDFA',
         background: '#FFFFFF',
-        text: '#1D3557',
-        textSecondary: '#457B9D',
+        text: '#134E4A',
+        textSecondary: '#0F766E',
         inputBackground: '#F1F1F1',
         error: '#D00000',
         white: '#FFFFFF',
@@ -18,7 +18,7 @@ export const theme = {
         xl: 32,
     },
     borderRadius: {
-        s: 8, // Small rounded corner as requested
+        s: 8,
         m: 12,
         l: 20,
         round: 50,
@@ -27,20 +27,20 @@ export const theme = {
         header: {
             fontSize: 28,
             fontWeight: 'bold' as 'bold',
-            color: '#1D3557',
+            color: '#134E4A',
         },
         title: {
             fontSize: 24,
             fontWeight: '600' as '600',
-            color: '#1D3557',
+            color: '#134E4A',
         },
         body: {
             fontSize: 16,
-            color: '#1D3557',
+            color: '#134E4A',
         },
         caption: {
             fontSize: 12,
-            color: '#457B9D',
+            color: '#0F766E',
         },
         button: {
             fontSize: 16,

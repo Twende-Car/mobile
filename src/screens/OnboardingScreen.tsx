@@ -17,7 +17,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Divocabb</Text>
+                    <Text style={styles.title}>Twende</Text>
                     <Text style={styles.subtitle}>Votre course, votre choix.</Text>
                 </View>
 

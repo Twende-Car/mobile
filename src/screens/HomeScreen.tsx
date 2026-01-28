@@ -294,14 +294,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     return (
         <View style={styles.container}>
             <View style={styles.roleToggle}>
-                <Text
+                {userRole === 'client' && <Text
                     style={[styles.roleBtn, userRole === 'client' && styles.roleBtnActive]}
                     onPress={() => setUserRole('client')}
-                >Client</Text>
-                <Text
+                >Client</Text>}
+                {userRole === 'driver' && <Text
                     style={[styles.roleBtn, userRole === 'driver' && styles.roleBtnActive]}
                     onPress={() => setUserRole('driver')}
-                >Driver</Text>
+                >Driver</Text>}
                 <TouchableOpacity
                     style={styles.historyBtn}
                     onPress={() => navigation.navigate('History')}
