@@ -48,6 +48,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [startConfirmed, setStartConfirmed] = useState(false);
     const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
     const [isEstimating, setIsEstimating] = useState(false);
+    const [eta, setEta] = useState<number | null>(null); // in minutes
+    const [driverLocation, setDriverLocation] = useState<{ latitude: number, longitude: number } | null>(null);
 
     useEffect(() => {
         if (socket && location && userRole === 'driver') {
@@ -187,12 +189,25 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 setCurrentRide(null);
                 setPendingRides([]);
                 setRideOffers([]);
+                setDriverLocation(null);
+                setEta(null);
             });
 
             socket.on('rideCompleted', (ride) => {
                 Alert.alert("Terminé", "La course est terminée.");
                 setCurrentRide(null);
                 setRideOffers([]);
+                setDriverLocation(null);
+                setEta(null);
+            });
+
+            socket.on('driverLocationUpdate', (data: { lat: number, lng: number, rideId: string }) => {
+                if (currentRide && currentRide.id === data.rideId) {
+                    setDriverLocation({
+                        latitude: data.lat,
+                        longitude: data.lng
+                    });
+                }
             });
         }
         return () => {
@@ -205,6 +220,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             socket?.off('rideStarted');
             socket?.off('rideCancelled');
             socket?.off('rideCompleted');
+            socket?.off('driverLocationUpdate');
         };
     }, [socket, userRole]);
 
@@ -325,15 +341,28 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     />
                 )}
 
-                {(pickupCoords && destinationCoords) || currentRide ? (
+                {(pickupCoords && destinationCoords) || (currentRide && currentRide.status === 'REQUESTED') ? (
                     <MapViewDirections
-                        origin={currentRide ? { latitude: currentRide.pickupLat, longitude: currentRide.pickupLng } : pickupCoords!}
-                        destination={currentRide ? { latitude: currentRide.dropoffLat, longitude: currentRide.dropoffLng } : destinationCoords!}
+                        origin={pickupCoords!}
+                        destination={destinationCoords!}
                         apikey={GOOGLE_MAPS_API_KEY}
                         strokeWidth={4}
                         strokeColor={theme.colors.primary}
                     />
                 ) : null}
+
+                {currentRide && (currentRide.status === 'ACCEPTED' || currentRide.status === 'IN_PROGRESS') && (
+                    <MapViewDirections
+                        origin={userRole === 'client' ? (driverLocation || { latitude: currentRide.pickupLat, longitude: currentRide.pickupLng }) : { latitude: location.coords.latitude, longitude: location.coords.longitude }}
+                        destination={currentRide.status === 'ACCEPTED' ? { latitude: currentRide.pickupLat, longitude: currentRide.pickupLng } : { latitude: currentRide.dropoffLat, longitude: currentRide.dropoffLng }}
+                        apikey={GOOGLE_MAPS_API_KEY}
+                        strokeWidth={4}
+                        strokeColor={currentRide.status === 'ACCEPTED' ? theme.colors.secondary : theme.colors.primary}
+                        onReady={(result) => {
+                            setEta(Math.ceil(result.duration));
+                        }}
+                    />
+                )}
 
                 {userRole === 'driver' && pendingRides.map(ride => (
                     <Marker
@@ -465,6 +494,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             <View style={styles.rideDetail}>
                                 <Text><Text style={{ fontWeight: 'bold' }}>Prix:</Text> {currentRide.fare}Fc</Text>
                                 <Text><Text style={{ fontWeight: 'bold' }}>Véhicule:</Text> {currentRide.vehicleModel}</Text>
+                                {eta && (
+                                    <Text><Text style={{ fontWeight: 'bold' }}>Arrivée estimée:</Text> {eta} min</Text>
+                                )}
                             </View>
 
                             {currentRide.status === 'ACCEPTED' && (
