@@ -4,23 +4,27 @@
     "slug": "twende",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/twende.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/twende.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.afrimetrik.twende",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/twende.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.afrimetrik.divocabb",
+      "package": "com.afrimetrik.twende",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "versionCode": 1
@@ -30,7 +34,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "a54e59a7-0f04-4971-a9bc-41ec3fd94273"
+        "projectId": "284de816-8227-476b-b2e9-cb6e55b229b4"
       }
     }
   }

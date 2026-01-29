@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../constants/api';
+import { usePreventRemove } from '@react-navigation/native';
 
 interface AuthContextData {
     user: any | null;
@@ -32,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
         }
         loadStorageData();
-    }, []);
+    }, [user]);
 
     const login = async (email: string, password: string) => {
         const response = await api.post('/auth/login', { email, password });

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { View, StyleSheet, Text, Dimensions, ActivityIndicator, Alert, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as Location from 'expo-location';
@@ -15,9 +15,6 @@ import api from '../constants/api';
 import { GOOGLE_MAPS_API_KEY } from '../constants/maps';
 
 // Mock drivers for visualization if none connected
-const MOCK_DRIVERS = [
-    { id: '1', lat: 37.78825, lng: -122.4324, title: 'Driver Prototype 1' },
-];
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -30,8 +27,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
     const [destination, setDestination] = useState('');
     const [destinationCoords, setDestinationCoords] = useState<{ latitude: number, longitude: number } | null>(null);
-    const [vehicleType, setVehicleType] = useState<'Voiture' | 'Moto' | 'Luxe'>('Voiture');
-    const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
+    //const [vehicleType, setVehicleType] = useState<'Voiture' | 'Moto' | 'Luxe'>('Voiture');
+    //const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
     const [fare, setFare] = useState<number | null>(null);
     const [userRole, setUserRole] = useState<'client' | 'driver'>(authUser?.role || 'client');
     const [pendingRides, setPendingRides] = useState<any[]>([]);
@@ -292,7 +289,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     return (
-        <View style={styles.container}>
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}>
             <View style={styles.roleToggle}>
                 {userRole === 'client' && <Text
                     style={[styles.roleBtn, userRole === 'client' && styles.roleBtnActive]}
@@ -611,7 +610,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
                 </View>
             )}
-        </View>
+        </KeyboardAvoidingView>
     );
 };
 

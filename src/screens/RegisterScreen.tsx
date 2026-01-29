@@ -133,6 +133,7 @@ export const RegisterScreen: React.FC<Props> = ({ route, navigation }) => {
                     { text: 'OK', onPress: () => navigation.navigate('Login') }
                 ]);
             } else {
+                console.log('Registering user');
                 await register({
                     name,
                     email,
@@ -142,7 +143,8 @@ export const RegisterScreen: React.FC<Props> = ({ route, navigation }) => {
                 });
             }
         } catch (error: any) {
-            Alert.alert('Erreur', error.response?.data?.message || 'Erreur lors de l’inscription');
+            Alert.alert('Erreur', error.response?.data?.message || 'Erreur lors de l\'inscription');
+            console.log(error);
         } finally {
             setLoading(false);
         }

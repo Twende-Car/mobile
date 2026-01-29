@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { theme } from '../theme';
@@ -8,6 +8,8 @@ import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
+
+const LogoImage = require('../../assets/twende.png')
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -35,6 +37,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.header}>
+                    <Image source={LogoImage} style={{ height: 80, width: '100%', resizeMode: 'contain' }} />
                     <Text style={styles.title}>Bon retour !</Text>
                     <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
                 </View>
@@ -87,6 +90,7 @@ const styles = StyleSheet.create({
     title: {
         ...theme.textVariants.header,
         marginBottom: theme.spacing.xs,
+        marginTop: theme.spacing.m,
     },
     subtitle: {
         ...theme.textVariants.body,
