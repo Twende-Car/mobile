@@ -33,13 +33,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
         }
         loadStorageData();
-    }, [user]);
+    }, []);
 
     const login = async (email: string, password: string) => {
         const response = await api.post('/auth/login', { email, password });
         const { token, user: userData } = response.data;
 
-        console.log(response.data + " 25");
+        //console.log(response.data + " 25");
 
         await AsyncStorage.setItem('@Divocab:token', token);
         await AsyncStorage.setItem('@Divocab:user', JSON.stringify(userData));

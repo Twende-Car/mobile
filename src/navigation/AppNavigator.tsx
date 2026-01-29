@@ -25,22 +25,37 @@ export const AppNavigator = () => {
         );
     }
 
+    const AuthNavigator = () => (
+        <Stack.Navigator
+            initialRouteName={"Onboarding"}
+            screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: '#FFFFFF' }
+            }}
+        >
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+        </Stack.Navigator>
+    )
+
+    const AppNavigator = () => (
+        <Stack.Navigator
+            initialRouteName={"Home"}
+            screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: '#FFFFFF' }
+            }}
+        >
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="History" component={HistoryScreen} />
+            <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+        </Stack.Navigator>
+    )
+
     return (
         <NavigationContainer>
-            <Stack.Navigator
-                initialRouteName={token ? "Home" : "Onboarding"}
-                screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: '#FFFFFF' }
-                }}
-            >
-                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
-                <Stack.Screen name="Home" component={HomeScreen} />
-                <Stack.Screen name="History" component={HistoryScreen} />
-                <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
-            </Stack.Navigator>
+            {token ? <AppNavigator /> : <AuthNavigator />}
         </NavigationContainer>
     );
 };

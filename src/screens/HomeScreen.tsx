@@ -181,13 +181,43 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 Alert.alert("Course démarrée", "Bon voyage !");
             });
 
-            socket.on('rideCancelled', () => {
-                Alert.alert("Annulation", "La course a été annulée");
+            socket.on('rideCancelled', (data?: { rideId: string }) => {
+                const rideId = data?.rideId;
+                if (userRole === 'driver') {
+                    if (rideId) {
+                        setPendingRides(prev => prev.filter(r => r.id !== rideId));
+                        if (currentRide && currentRide.id === rideId) {
+                            Alert.alert("Annulation", "Le passager a annulé la course");
+                            setCurrentRide(null);
+                            setRideOffers([]);
+                            setDriverLocation(null);
+                            setEta(null);
+                        }
+                    } else {
+                        Alert.alert("Annulation", "La course a été annulée");
+                        setPendingRides([]);
+                        setCurrentRide(null);
+                        setRideOffers([]);
+                        setDriverLocation(null);
+                        setEta(null);
+                    }
+                } else {
+                    if (!rideId || (currentRide && currentRide.id === rideId)) {
+                        Alert.alert("Annulation", "La course a été annulée");
+                        setCurrentRide(null);
+                        setRideOffers([]);
+                        setDriverLocation(null);
+                        setEta(null);
+                    }
+                }
+            });
+
+            socket.on('rideCancelledSuccess', () => {
                 setCurrentRide(null);
-                setPendingRides([]);
                 setRideOffers([]);
                 setDriverLocation(null);
                 setEta(null);
+                Alert.alert("Succès", "Votre commande a été annulée.");
             });
 
             socket.on('rideCompleted', (ride) => {
@@ -270,6 +300,23 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const handleConfirmStart = () => {
         if (socket && currentRide) {
             socket.emit('confirmStart', { rideId: currentRide.id });
+        }
+    };
+
+    const handleCancelRide = () => {
+        if (socket && currentRide) {
+            Alert.alert(
+                "Annuler la commande",
+                "Êtes-vous sûr de vouloir annuler votre commande ?",
+                [
+                    { text: "Non", style: "cancel" },
+                    {
+                        text: "Oui, annuler",
+                        style: "destructive",
+                        onPress: () => socket.emit('cancelRide', { rideId: currentRide.id })
+                    }
+                ]
+            );
         }
     };
 
@@ -481,6 +528,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     ))
                                 )}
                             </ScrollView>
+
+                            <Button
+                                title="Annuler ma commande"
+                                variant="outline"
+                                onPress={handleCancelRide}
+                                style={[styles.button, { borderColor: theme.colors.error, marginTop: 15 }]}
+                                textStyle={{ color: theme.colors.error }}
+                            />
                         </>
                     )}
 
