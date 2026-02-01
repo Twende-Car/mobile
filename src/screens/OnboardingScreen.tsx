@@ -8,7 +8,7 @@ import { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
-const LogoImage = require('../../assets/twende.png')
+const LogoImage = require('../../assets/twendeG.png')
 
 export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
     const handleRoleSelect = (role: 'client' | 'driver') => {
@@ -19,8 +19,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Image source={LogoImage} style={{ height: 80, resizeMode: 'contain' }} />
-                    <Text style={styles.title}>Twende</Text>
+                    <Image source={LogoImage} style={{ height: 180, resizeMode: 'contain' }} />
                     <Text style={styles.subtitle}>Votre course, votre choix.</Text>
                 </View>
 

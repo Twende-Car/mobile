@@ -88,7 +88,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 return;
             }
 
-            let location = await Location.getCurrentPositionAsync({});
+            let location = await Location.getCurrentPositionAsync({ accuracy: 6 });
             setLocation(location);
             setPickupCoords({
                 latitude: location.coords.latitude,
@@ -253,7 +253,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
     const handleRequestRide = () => {
         if (!destinationCoords) {
-            Alert.alert("Erreur", "Veuillez entrer une destination");
+            Alert.alert("Erreur", "Destination non trouvée");
             return;
         }
         setShowSelectionModal(true);
@@ -343,11 +343,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 {userRole === 'client' && <Text
                     style={[styles.roleBtn, userRole === 'client' && styles.roleBtnActive]}
                     onPress={() => setUserRole('client')}
-                >Client</Text>}
+                >Accueil</Text>}
                 {userRole === 'driver' && <Text
                     style={[styles.roleBtn, userRole === 'driver' && styles.roleBtnActive]}
                     onPress={() => setUserRole('driver')}
-                >Driver</Text>}
+                >Accueil</Text>}
                 <TouchableOpacity
                     style={styles.historyBtn}
                     onPress={() => navigation.navigate('History')}
@@ -442,6 +442,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             <View style={{ zIndex: 100, marginBottom: 10 }}>
                                 <GooglePlacesAutocomplete
                                     placeholder='Lieu de départ'
+
                                     onPress={(data, details = null) => {
                                         setPickup(data.description);
                                         if (details) {
@@ -454,6 +455,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     query={{
                                         key: GOOGLE_MAPS_API_KEY,
                                         language: 'fr',
+                                        components: 'country:cd',
                                     }}
                                     fetchDetails={true}
                                     styles={{
@@ -483,6 +485,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     query={{
                                         key: GOOGLE_MAPS_API_KEY,
                                         language: 'fr',
+                                        components: 'country:cd',
                                     }}
                                     fetchDetails={true}
                                     styles={{

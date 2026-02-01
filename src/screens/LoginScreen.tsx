@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
-const LogoImage = require('../../assets/twende.png')
+const LogoImage = require('../../assets/twendeG.png')
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -37,7 +37,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Image source={LogoImage} style={{ height: 80, width: '100%', resizeMode: 'contain' }} />
+                    <Image source={LogoImage} style={{ height: 180, width: '100%', resizeMode: 'contain' }} />
                     <Text style={styles.title}>Bon retour !</Text>
                     <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
                 </View>

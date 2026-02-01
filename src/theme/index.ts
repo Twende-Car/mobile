@@ -1,10 +1,10 @@
 export const theme = {
     colors: {
-        primary: '#0D9488', // Teal color theme
+        primary: '#008115', // Teal color theme
         secondary: '#F0FDFA',
         background: '#FFFFFF',
-        text: '#134E4A',
-        textSecondary: '#0F766E',
+        text: '#202020ff',
+        textSecondary: '#000000ff',
         inputBackground: '#F1F1F1',
         error: '#D00000',
         white: '#FFFFFF',

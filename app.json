@@ -4,31 +4,53 @@
     "slug": "twende",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/twende.png",
+    "icon": "./assets/twende_white.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/twende.png",
+      "image": "./assets/twendeW.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#008115"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.afrimetrik.twende",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "googleMapsApiKey": ""
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/twende.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/twende_white.png",
+        "backgroundColor": "#008115"
       },
       "package": "com.afrimetrik.twende",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "versionCode": 1
+      "versionCode": 1,
+      "config": {
+        "googleMaps": {
+          "apiKey": ""
+        }
+      }
     },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#008115",
+          "image": "./assets/twendeW.png",
+          "dark": {
+            "image": "./assets/twendeW.png",
+            "backgroundColor": "#008115"
+          },
+          "imageHeight": 200
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
