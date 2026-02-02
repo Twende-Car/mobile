@@ -12,7 +12,7 @@ import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import api from '../constants/api';
-import { GOOGLE_MAPS_API_KEY } from '../constants/maps';
+import { GOOGLE_MAPS_API_KEY, CITIES } from '../constants/maps';
 
 // Mock drivers for visualization if none connected
 
@@ -34,6 +34,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [pendingRides, setPendingRides] = useState<any[]>([]);
     const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
     const [selectedVehicleType, setSelectedVehicleType] = useState<any>(null);
+    const [selectedCity, setSelectedCity] = useState(CITIES.BENI);
+    const mapRef = React.useRef<MapView>(null);
 
     // Bidding Flow State
     const [rideOffers, setRideOffers] = useState<any[]>([]);
@@ -113,6 +115,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             fetchPendingRides();
         }
     }, [userRole]);
+
+    // Re-fetch rides when socket reconnects
+    useEffect(() => {
+        if (isConnected && userRole === 'driver') {
+            fetchPendingRides();
+        }
+    }, [isConnected, userRole]);
 
     const fetchPendingRides = async () => {
         try {
@@ -363,6 +372,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <MapView
+                ref={mapRef}
                 style={styles.map}
                 initialRegion={{
                     latitude: location.coords.latitude,
@@ -439,6 +449,28 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={{ flex: 1 }}>
                             <Text style={styles.title}>Où allez-vous ?</Text>
 
+                            {/* <View style={styles.citySelector}>
+                                {Object.values(CITIES).map((city) => (
+                                    <TouchableOpacity
+                                        key={city.name}
+                                        style={[styles.cityBtn, selectedCity.name === city.name && styles.cityBtnActive]}
+                                        onPress={() => {
+                                            setSelectedCity(city);
+                                            mapRef.current?.animateToRegion({
+                                                latitude: city.latitude,
+                                                longitude: city.longitude,
+                                                latitudeDelta: 0.05,
+                                                longitudeDelta: 0.05,
+                                            });
+                                        }}
+                                    >
+                                        <Text style={[styles.cityBtnText, selectedCity.name === city.name && styles.cityBtnTextActive]}>
+                                            {city.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View> */}
+
                             <View style={{ zIndex: 100, marginBottom: 10 }}>
                                 <GooglePlacesAutocomplete
                                     placeholder='Lieu de départ'
@@ -456,6 +488,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                         key: GOOGLE_MAPS_API_KEY,
                                         language: 'fr',
                                         components: 'country:cd',
+                                        location: `${location.coords.latitude},${location.coords.longitude}`,
+                                        radius: 20000,
+                                        strictbounds: true,
                                     }}
                                     fetchDetails={true}
                                     styles={{
@@ -486,6 +521,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                         key: GOOGLE_MAPS_API_KEY,
                                         language: 'fr',
                                         components: 'country:cd',
+                                        location: `${location.coords.latitude},${location.coords.longitude}`,
+                                        radius: 20000,
+                                        strictbounds: true,
                                     }}
                                     fetchDetails={true}
                                     styles={{
@@ -578,7 +616,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     {/* Driver Flow - Pending Request List */}
                     {userRole === 'driver' && !currentRide && (
                         <View>
-                            <Text style={styles.title}>Demandes à proximité</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                <Text style={[styles.title, { marginBottom: 0 }]}>Demandes à proximité</Text>
+                                <TouchableOpacity onPress={fetchPendingRides} style={{ padding: 5 }}>
+                                    <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: 'bold' }}>Rafraîchir</Text>
+                                </TouchableOpacity>
+                            </View>
                             {pendingRides.length === 0 ? (
                                 <Text style={styles.emptyText}>Aucune demande...</Text>
                             ) : (
@@ -847,5 +890,28 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 15,
         textAlign: 'center'
-    }
+    },
+    citySelector: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 15,
+    },
+    cityBtn: {
+        flex: 1,
+        paddingVertical: 8,
+        borderRadius: theme.borderRadius.s,
+        backgroundColor: theme.colors.inputBackground,
+        alignItems: 'center',
+    },
+    cityBtnActive: {
+        backgroundColor: theme.colors.primary,
+    },
+    cityBtnText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: theme.colors.textSecondary,
+    },
+    cityBtnTextActive: {
+        color: 'white',
+    },
 });
