@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import api from '../constants/api';
 import { GOOGLE_MAPS_API_KEY, CITIES } from '../constants/maps';
+import * as Speech from 'expo-speech';
 
 // Mock drivers for visualization if none connected
 
@@ -49,6 +50,31 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [isEstimating, setIsEstimating] = useState(false);
     const [eta, setEta] = useState<number | null>(null); // in minutes
     const [driverLocation, setDriverLocation] = useState<{ latitude: number, longitude: number } | null>(null);
+    const [navigationSteps, setNavigationSteps] = useState<any[]>([]);
+    const [currentStepIndex, setCurrentStepIndex] = useState(0);
+    const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
+    const [lastRerouteTime, setLastRerouteTime] = useState(0);
+
+    const speak = (text: string) => {
+        Speech.speak(text, { language: 'fr' });
+    };
+
+    const stripHtml = (html: string) => {
+        return html.replace(/<[^>]*>?/gm, '');
+    };
+
+    const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371e3; // metres
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    };
 
     useEffect(() => {
         if (socket && location && userRole === 'driver') {
@@ -56,8 +82,42 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 lat: location.coords.latitude,
                 lng: location.coords.longitude
             });
+
+            // Rerouting detection
+            if (currentRide && currentRide.status === 'IN_PROGRESS' && routeCoordinates.length > 0) {
+                let minDistance = Infinity;
+                routeCoordinates.forEach(coord => {
+                    const dist = getDistance(location.coords.latitude, location.coords.longitude, coord.latitude, coord.longitude);
+                    if (dist < minDistance) minDistance = dist;
+                });
+
+                // If deviation > 200m and last reroute was more than 30s ago
+                if (minDistance > 200 && Date.now() - lastRerouteTime > 30000) {
+                    setLastRerouteTime(Date.now());
+                    socket.emit('rerouting', { rideId: currentRide.id });
+                    Alert.alert("Itinéraire changé", "Vous avez dévié du trajet prévu. L'itinéraire est recalculé.");
+                }
+
+                // Voice guidance / Step progression
+                if (navigationSteps.length > 0 && currentStepIndex < navigationSteps.length) {
+                    const nextStep = navigationSteps[currentStepIndex];
+                    const distToNext = getDistance(
+                        location.coords.latitude,
+                        location.coords.longitude,
+                        nextStep.start_location.lat,
+                        nextStep.start_location.lng
+                    );
+
+                    if (distToNext < 50) { // If within 50m of next step start
+                        setCurrentStepIndex(currentStepIndex + 1);
+                        if (navigationSteps[currentStepIndex + 1]) {
+                            speak(stripHtml(navigationSteps[currentStepIndex + 1].html_instructions));
+                        }
+                    }
+                }
+            }
         }
-    }, [socket, location, userRole]);
+    }, [socket, location, userRole, currentRide, routeCoordinates, navigationSteps, currentStepIndex, lastRerouteTime]);
 
     useEffect(() => {
         if (showSelectionModal && selectedVehicleType) {
@@ -245,6 +305,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     });
                 }
             });
+
+            socket.on('rerouting', () => {
+                if (userRole === 'client') {
+                    Alert.alert("Information", "Le chauffeur a changé d'itinéraire. La carte est mise à jour.");
+                }
+            });
         }
         return () => {
             socket?.off('newRideRequest');
@@ -371,6 +437,17 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
 
+            {userRole === 'driver' && currentRide && currentRide.status === 'IN_PROGRESS' && navigationSteps.length > 0 && (
+                <View style={styles.navHeader}>
+                    <Text style={styles.navInstruction}>
+                        {stripHtml(navigationSteps[currentStepIndex]?.html_instructions || 'Suivez l\'itinéraire')}
+                    </Text>
+                    <Text style={styles.navDistance}>
+                        {navigationSteps[currentStepIndex]?.distance.text || ''}
+                    </Text>
+                </View>
+            )}
+
             <MapView
                 ref={mapRef}
                 style={styles.map}
@@ -416,6 +493,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         strokeColor={currentRide.status === 'ACCEPTED' ? theme.colors.secondary : theme.colors.primary}
                         onReady={(result) => {
                             setEta(Math.ceil(result.duration));
+                            if (result.legs && result.legs[0]) {
+                                setNavigationSteps(result.legs[0].steps);
+                                setRouteCoordinates(result.coordinates);
+                                if (userRole === 'driver' && currentRide.status === 'IN_PROGRESS' && currentStepIndex === 0) {
+                                    speak(stripHtml(result.legs[0].steps[0].html_instructions));
+                                }
+                            }
                         }}
                     />
                 )}
@@ -865,6 +949,36 @@ const styles = StyleSheet.create({
         padding: 10,
         borderRadius: 8,
         marginBottom: 10
+    },
+    navHeader: {
+        position: 'absolute',
+        top: 110,
+        left: 20,
+        right: 20,
+        backgroundColor: theme.colors.primary,
+        padding: 15,
+        borderRadius: 12,
+        zIndex: 10,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    navInstruction: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
+        flex: 1,
+        marginRight: 10,
+    },
+    navDistance: {
+        color: 'white',
+        fontSize: 18,
+        fontWeight: 'bold',
     },
     smallButton: {
         width: 'auto',
