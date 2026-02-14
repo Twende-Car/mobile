@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Alert, Image, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { theme } from '../theme';
@@ -42,7 +42,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
                 </View>
 
-                <View style={styles.form}>
+                <KeyboardAvoidingView style={styles.form}>
                     <Text style={styles.label}>Email</Text>
                     <TextInput
                         style={styles.input}
@@ -63,7 +63,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
                     />
 
                     <Button title="Se connecter" onPress={handleLogin} loading={loading} style={styles.marginTop} />
-                </View>
+                </KeyboardAvoidingView>
 
                 <View style={styles.footer}>
                     <Text style={styles.linkText}>Pas encore de compte ? </Text>

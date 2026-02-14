@@ -133,7 +133,7 @@ export const RegisterScreen: React.FC<Props> = ({ route, navigation }) => {
                     { text: 'OK', onPress: () => navigation.navigate('Login') }
                 ]);
             } else {
-                console.log('Registering user');
+                //console.log('Registering user');
                 await register({
                     name,
                     email,

@@ -11,9 +11,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import api from '../constants/api';
+import api, { API_URL } from '../constants/api';
 import { GOOGLE_MAPS_API_KEY, CITIES } from '../constants/maps';
 import * as Speech from 'expo-speech';
+import * as Linking from 'expo-linking';
+import { Image } from 'react-native';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 
 // Mock drivers for visualization if none connected
 
@@ -54,6 +57,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
     const [lastRerouteTime, setLastRerouteTime] = useState(0);
+    const [rideSummary, setRideSummary] = useState<{ fare: number, duration: string } | null>(null);
+    const [startTime, setStartTime] = useState<number | null>(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [detailedDriver, setDetailedDriver] = useState<any>(null);
+    const [detailedPassenger, setDetailedPassenger] = useState<any>(null);
 
     const speak = (text: string) => {
         Speech.speak(text, { language: 'fr' });
@@ -80,7 +88,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         if (socket && location && userRole === 'driver') {
             socket.emit('updateLocation', {
                 lat: location.coords.latitude,
-                lng: location.coords.longitude
+                lng: location.coords.longitude,
+                rideId: currentRide?.id
             });
 
             // Rerouting detection
@@ -189,11 +198,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 ? `/rides/available-rides?lat=${location.coords.latitude}&lng=${location.coords.longitude}`
                 : '/rides/available-rides';
             const response = await api.get(url);
+            //console.log("Demandes disponibles", response.data);
             setPendingRides(response.data);
         } catch (error) {
             console.error("Erreur lors de la récupération des demandes", error);
         }
     };
+
+    //console.log('userRole: ', userRole, ' CurrentRide: ', currentRide?.driverId);
 
     // Listen for socket events
     useEffect(() => {
@@ -220,8 +232,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             });
 
             socket.on('offerAccepted', (data) => {
-                const { ride } = data;
+                const { ride, passenger, driver } = data;
                 setCurrentRide(ride);
+                if (passenger) setDetailedPassenger(passenger);
+                if (driver) setDetailedDriver(driver);
                 setStartConfirmed(false);
                 Alert.alert("Offre acceptée", "Le client a accepté votre offre ! Rendez-vous au point de départ.");
             });
@@ -229,17 +243,21 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             socket.on('rideAcceptedSuccess', (data) => {
                 const { ride, driver } = data;
                 setCurrentRide(ride);
+                if (driver) setDetailedDriver(driver);
                 setStartConfirmed(false);
                 Alert.alert(
                     "Course Confirmée",
-                    `Le chauffeur ${driver.name} arrive !\n` +
+                    `Le chauffeur ${driver?.name || 'Inconnu'} arrive !\n` +
                     `Véhicule: ${ride.vehicleModel} (${ride.vehicleColor})`
                 );
             });
 
             socket.on('startConfirmed', (data) => {
-                const { by, ride } = data;
+                //console.log('startConfirmed', data);
+                const { by, ride, driver, passenger } = data;
                 setCurrentRide(ride);
+                if (driver) setDetailedDriver(driver);
+                if (passenger) setDetailedPassenger(passenger);
                 if (by === userRole) {
                     setStartConfirmed(true);
                 }
@@ -247,6 +265,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
             socket.on('rideStarted', (ride) => {
                 setCurrentRide(ride);
+                setStartTime(Date.now());
                 Alert.alert("Course démarrée", "Bon voyage !");
             });
 
@@ -290,12 +309,26 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             });
 
             socket.on('rideCompleted', (ride) => {
-                Alert.alert("Terminé", "La course est terminée.");
-                setCurrentRide(null);
+                const endTime = Date.now();
+                const durationMs = startTime ? endTime - startTime : 0;
+                const durationMin = Math.ceil(durationMs / 60000);
+
+                setRideSummary({
+                    fare: ride.fare,
+                    duration: `${durationMin} min`
+                });
+
+                //console.log('rideCompleted... ', userRole);
+
+                // Clear navigation but keep currentRide until user dismisses summary
                 setRideOffers([]);
+                setCurrentRide(null);
                 setDriverLocation(null);
                 setEta(null);
+                setNavigationSteps([]);
             });
+
+
 
             socket.on('driverLocationUpdate', (data: { lat: number, lng: number, rideId: string }) => {
                 if (currentRide && currentRide.id === data.rideId) {
@@ -324,7 +357,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             socket?.off('rideCompleted');
             socket?.off('driverLocationUpdate');
         };
-    }, [socket, userRole]);
+    }, [socket, userRole, currentRide]);
 
     const handleRequestRide = () => {
         if (!destinationCoords) {
@@ -345,6 +378,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 dropoffAddress: destination,
                 distance: 5,
                 vehicleTypeId: selectedVehicleType?.id,
+                passengerName: authUser?.name,
+                passengerPhone: authUser?.phone,
             });
             Alert.alert("Succès", "Demande envoyée. Attente des offres des chauffeurs...");
         }
@@ -373,7 +408,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     const handleConfirmStart = () => {
+        //console.log("confirmStart")
+
         if (socket && currentRide) {
+            //console.log("EmitEvent", currentRide.id)
             socket.emit('confirmStart', { rideId: currentRide.id });
         }
     };
@@ -401,6 +439,27 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         }
     };
 
+    const handleDismissSummary = () => {
+        handleCompleteRide();
+        setRideSummary(null);
+        setCurrentRide(null);
+        setStartTime(null);
+        setDetailedDriver(null);
+        setDetailedPassenger(null);
+    };
+
+    const handleOpenWhatsApp = (phone: string) => {
+        const formattedPhone = phone.replace(/[^0-9]/g, '');
+        const url = `whatsapp://send?phone=${formattedPhone}`;
+        Linking.canOpenURL(url).then((supported: any) => {
+            if (supported) {
+                Linking.openURL(url);
+            } else {
+                Linking.openURL(`https://wa.me/${formattedPhone}`);
+            }
+        });
+    };
+
     if (!location) {
         return (
             <View style={styles.center}>
@@ -408,6 +467,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 <Text>{errorMsg || "Chargement..."}</Text>
             </View>
         );
+    }
+
+    let waintingText = 'Chauffeur en route'
+    if (userRole === 'driver') {
+        waintingText = 'Client en attente'
     }
 
     return (
@@ -433,7 +497,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     style={[styles.historyBtn, { backgroundColor: theme.colors.error }]}
                     onPress={logout}
                 >
-                    <Text style={[styles.historyText, { color: 'white' }]}>Off</Text>
+                    <Text style={[styles.historyText, { color: 'white' }]}>Déconnexion</Text>
                 </TouchableOpacity>
             </View>
 
@@ -509,20 +573,37 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         key={ride.id}
                         coordinate={{ latitude: ride.pickupLat, longitude: ride.pickupLng }}
                         title="Nouveau passager"
-                        pinColor="green"
                         onPress={() => {
                             setSelectedRideForBid(ride);
                             setShowBidModal(true);
                         }}
-                    />
+                    >
+                        <View style={[styles.markerView, { backgroundColor: '#FFD700' }]}>
+                            <Ionicons name="person" size={18} color="white" />
+                        </View>
+                    </Marker>
                 ))}
 
                 {currentRide && currentRide.status === 'ACCEPTED' && userRole === 'driver' && (
                     <Marker
                         coordinate={{ latitude: currentRide.pickupLat, longitude: currentRide.pickupLng }}
                         title="Passager à récupérer"
-                        pinColor="yellow"
-                    />
+                    >
+                        <View style={[styles.markerView, { backgroundColor: '#FFD700' }]}>
+                            <Ionicons name="person" size={18} color="white" />
+                        </View>
+                    </Marker>
+                )}
+
+                {userRole === 'client' && currentRide && (currentRide.status === 'ACCEPTED' || currentRide.status === 'IN_PROGRESS') && driverLocation && (
+                    <Marker
+                        coordinate={{ latitude: driverLocation.latitude, longitude: driverLocation.longitude }}
+                        title="Votre chauffeur"
+                    >
+                        <View style={[styles.markerView, { backgroundColor: theme.colors.primary }]}>
+                            <FontAwesome5 name="car" size={18} color="white" />
+                        </View>
+                    </Marker>
                 )}
             </MapView>
 
@@ -532,28 +613,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     {userRole === 'client' && !currentRide && (
                         <View style={{ flex: 1 }}>
                             <Text style={styles.title}>Où allez-vous ?</Text>
-
-                            {/* <View style={styles.citySelector}>
-                                {Object.values(CITIES).map((city) => (
-                                    <TouchableOpacity
-                                        key={city.name}
-                                        style={[styles.cityBtn, selectedCity.name === city.name && styles.cityBtnActive]}
-                                        onPress={() => {
-                                            setSelectedCity(city);
-                                            mapRef.current?.animateToRegion({
-                                                latitude: city.latitude,
-                                                longitude: city.longitude,
-                                                latitudeDelta: 0.05,
-                                                longitudeDelta: 0.05,
-                                            });
-                                        }}
-                                    >
-                                        <Text style={[styles.cityBtnText, selectedCity.name === city.name && styles.cityBtnTextActive]}>
-                                            {city.name}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View> */}
 
                             <View style={{ zIndex: 100, marginBottom: 10 }}>
                                 <GooglePlacesAutocomplete
@@ -661,6 +720,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                 style={[styles.button, { borderColor: theme.colors.error, marginTop: 15 }]}
                                 textStyle={{ color: theme.colors.error }}
                             />
+
+
                         </>
                     )}
 
@@ -668,7 +729,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     {currentRide && (currentRide.status === 'ACCEPTED' || currentRide.status === 'IN_PROGRESS') && (
                         <View>
                             <Text style={styles.title}>
-                                {currentRide.status === 'ACCEPTED' ? 'Chauffeur en route' : 'Course en cours'}
+                                {currentRide.status === 'ACCEPTED' ? waintingText : 'Course en cours'}
                             </Text>
                             <View style={styles.rideDetail}>
                                 <Text><Text style={{ fontWeight: 'bold' }}>Prix:</Text> {currentRide.fare}Fc</Text>
@@ -694,6 +755,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     style={styles.button}
                                 />
                             )}
+
+                            <Button
+                                title="Détails"
+                                variant="outline"
+                                onPress={() => setShowDetailsModal(true)}
+                                style={[styles.button, { marginTop: 10 }]}
+                            />
                         </View>
                     )}
 
@@ -703,7 +771,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                 <Text style={[styles.title, { marginBottom: 0 }]}>Demandes à proximité</Text>
                                 <TouchableOpacity onPress={fetchPendingRides} style={{ padding: 5 }}>
-                                    <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: 'bold' }}>Rafraîchir</Text>
+                                    <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: 'bold' }}>Rafraichir</Text>
                                 </TouchableOpacity>
                             </View>
                             {pendingRides.length === 0 ? (
@@ -792,6 +860,88 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             <Button title="Annuler" variant="outline" onPress={() => setShowBidModal(false)} style={{ flex: 1 }} />
                             <Button title="Envoyer" onPress={handleSubmitOffer} style={{ flex: 1 }} />
                         </View>
+                    </View>
+                </View>
+            )}
+
+            {/* Ride Summary Modal */}
+            {rideSummary && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                            <Text style={{ fontSize: 40 }}>🎉</Text>
+                            <Text style={styles.modalTitle}>Course Terminée !</Text>
+                        </View>
+
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Montant final</Text>
+                            <Text style={styles.summaryValue}>{rideSummary.fare} Fc</Text>
+                        </View>
+
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Durée</Text>
+                            <Text style={styles.summaryValue}>{rideSummary.duration}</Text>
+                        </View>
+
+                        <Button
+                            title="Terminer"
+                            onPress={handleDismissSummary}
+                            style={{ marginTop: 20 }}
+                        />
+                    </View>
+                </View>
+            )}
+
+            {/* Ride Details Modal */}
+            {showDetailsModal && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Détails de la course</Text>
+
+                        {userRole === 'client' && (
+                            <View style={{ alignItems: 'center' }}>
+                                {detailedDriver?.vehiclePhoto ? (
+                                    <Image
+                                        source={{ uri: `${API_URL}/uploads/${detailedDriver.vehiclePhoto}` }}
+                                        style={styles.vehicleThumbnail}
+                                    />
+                                ) : (
+                                    <View style={styles.vehicleThumbnailPlaceholder}>
+                                        <Text>Impossible de charger la photo...</Text>
+                                    </View>
+                                )}
+                                <View style={styles.detailCard}>
+                                    <Text style={styles.detailRow}><Text style={styles.detailLabel}>Chauffeur:</Text> {detailedDriver?.name || 'Inconnu'}</Text>
+                                    <Text style={styles.detailRow}><Text style={styles.detailLabel}>Véhicule:</Text> {currentRide?.vehicleModel || detailedDriver?.vehicleModel}</Text>
+                                    <Text style={styles.detailRow}><Text style={styles.detailLabel}>Couleur:</Text> {currentRide?.vehicleColor || detailedDriver?.vehicleColor}</Text>
+                                    <Text style={styles.detailRow}><Text style={styles.detailLabel}>Immatriculation:</Text> {currentRide?.vehicleRegistration || detailedDriver?.vehiclePlate}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        {userRole === 'driver' && (
+                            <View>
+                                <View style={styles.detailCard}>
+                                    <Text style={styles.detailRow}><Text style={styles.detailLabel}>Client:</Text> {detailedPassenger?.name || currentRide?.passengerName || 'Client'}</Text>
+                                    <Text style={styles.detailRow}><Text style={styles.detailLabel}>Téléphone:</Text> {detailedPassenger?.phoneNumber || currentRide?.passengerPhone || 'Non disponible'}</Text>
+                                </View>
+
+                                {(detailedPassenger?.phoneNumber) && (
+                                    <Button
+                                        title="Contacter sur WhatsApp"
+                                        onPress={() => handleOpenWhatsApp(detailedPassenger.phoneNumber)}
+                                        style={[styles.button, { backgroundColor: '#25D366' }]}
+                                    />
+                                )}
+                            </View>
+                        )}
+
+                        <Button
+                            title="Fermer"
+                            variant="outline"
+                            onPress={() => setShowDetailsModal(false)}
+                            style={{ marginTop: 20 }}
+                        />
                     </View>
                 </View>
             )}
@@ -985,6 +1135,24 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
         paddingHorizontal: 15
     },
+    summaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.inputBackground,
+        width: '100%'
+    },
+    summaryLabel: {
+        fontSize: 16,
+        color: theme.colors.textSecondary
+    },
+    summaryValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.colors.primary
+    },
     modalOverlay: {
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,
@@ -1028,4 +1196,50 @@ const styles = StyleSheet.create({
     cityBtnTextActive: {
         color: 'white',
     },
+    vehicleThumbnail: {
+        width: '100%',
+        height: 150,
+        borderRadius: 8,
+        marginBottom: 15,
+        backgroundColor: '#f0f0f0'
+    },
+    vehicleThumbnailPlaceholder: {
+        width: '100%',
+        height: 150,
+        borderRadius: 8,
+        marginBottom: 15,
+        backgroundColor: '#f0f0f0',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    detailCard: {
+        width: '100%',
+        backgroundColor: '#f8f9fa',
+        padding: 15,
+        borderRadius: 8,
+        marginBottom: 10
+    },
+    detailRow: {
+        fontSize: 14,
+        marginBottom: 8,
+        color: theme.colors.text
+    },
+    detailLabel: {
+        fontWeight: 'bold',
+        color: theme.colors.textSecondary
+    },
+    markerView: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'white',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    }
 });
