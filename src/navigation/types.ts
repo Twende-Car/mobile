@@ -5,4 +5,5 @@ export type RootStackParamList = {
     Home: undefined;
     History: undefined;
     HistoryDetail: { rideId: string };
+    Wallet: undefined;
 };

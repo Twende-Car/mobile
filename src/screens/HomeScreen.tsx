@@ -493,6 +493,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 >
                     <Text style={styles.historyText}>Hist.</Text>
                 </TouchableOpacity>
+                {userRole === 'driver' && (
+                    <TouchableOpacity
+                        style={[styles.historyBtn, { backgroundColor: theme.colors.primary }]}
+                        onPress={() => navigation.navigate('Wallet')}
+                    >
+                        <Text style={[styles.historyText, { color: 'white' }]}>W</Text>
+                    </TouchableOpacity>
+                )}
                 <TouchableOpacity
                     style={[styles.historyBtn, { backgroundColor: theme.colors.error }]}
                     onPress={logout}

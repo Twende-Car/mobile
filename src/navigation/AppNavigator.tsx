@@ -11,6 +11,7 @@ import { HistoryDetailScreen } from '../screens/HistoryDetailScreen';
 import { RootStackParamList } from './types';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
+import { WalletScreen } from '../screens/WalletScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -50,6 +51,7 @@ export const AppNavigator = () => {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="History" component={HistoryScreen} />
             <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+            <Stack.Screen name="Wallet" component={WalletScreen} />
         </Stack.Navigator>
     )
 

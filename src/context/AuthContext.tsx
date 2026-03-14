@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../constants/api';
-import { usePreventRemove } from '@react-navigation/native';
+import api, { setAuthFailureCallback } from '../constants/api';
 
 interface AuthContextData {
     user: any | null;
@@ -35,14 +34,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loadStorageData();
     }, []);
 
+    useEffect(() => {
+        setAuthFailureCallback(() => {
+            setToken(null);
+            setUser(null);
+        });
+    }, []);
+
     const login = async (email: string, password: string) => {
         const response = await api.post('/auth/login', { email, password });
-        const { token, user: userData } = response.data;
-
-        //console.log(response.data + " 25");
+        const { token, refreshToken, user: userData } = response.data;
 
         await AsyncStorage.setItem('@Divocab:token', token);
         await AsyncStorage.setItem('@Divocab:user', JSON.stringify(userData));
+        if (refreshToken) {
+            await AsyncStorage.setItem('@Divocab:refreshToken', refreshToken);
+        }
 
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setToken(token);
@@ -51,11 +58,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const register = async (userData: any) => {
         const response = await api.post('/auth/register', userData);
-        const { token, user: newUser } = response.data;
+        const { token, refreshToken, user: newUser } = response.data;
 
         if (token) {
             await AsyncStorage.setItem('@Divocab:token', token);
             await AsyncStorage.setItem('@Divocab:user', JSON.stringify(newUser));
+            if (refreshToken) {
+                await AsyncStorage.setItem('@Divocab:refreshToken', refreshToken);
+            }
             api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             setToken(token);
             setUser(newUser);
@@ -73,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const logout = async () => {
-        await AsyncStorage.multiRemove(['@Divocab:token', '@Divocab:user']);
+        await AsyncStorage.multiRemove(['@Divocab:token', '@Divocab:user', '@Divocab:refreshToken']);
         setToken(null);
         setUser(null);
     };
