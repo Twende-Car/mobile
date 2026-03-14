@@ -198,7 +198,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 ? `/rides/available-rides?lat=${location.coords.latitude}&lng=${location.coords.longitude}`
                 : '/rides/available-rides';
             const response = await api.get(url);
-            //console.log("Demandes disponibles", response.data);
+            console.log("Demandes disponibles", response.data);
             setPendingRides(response.data);
         } catch (error) {
             console.error("Erreur lors de la récupération des demandes", error);
@@ -627,6 +627,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                     placeholder='Lieu de départ'
 
                                     onPress={(data, details = null) => {
+                                        console.log("STARTING... DATA: ", data)
                                         setPickup(data.description);
                                         if (details) {
                                             setPickupCoords({
@@ -644,6 +645,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                         strictbounds: true,
                                     }}
                                     fetchDetails={true}
+                                    onFail={(err) => console.log("Error: "  + err)}
                                     styles={{
                                         textInput: styles.input,
                                         container: { flex: 0 },
@@ -677,6 +679,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                         strictbounds: true,
                                     }}
                                     fetchDetails={true}
+                                    onFail={(err) => console.log("Error: "  + err)}
                                     styles={{
                                         textInput: styles.input,
                                         container: { flex: 0 },
