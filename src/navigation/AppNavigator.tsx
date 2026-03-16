@@ -5,13 +5,11 @@ import { View, ActivityIndicator } from 'react-native';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
-import { HomeScreen } from '../screens/HomeScreen';
-import { HistoryScreen } from '../screens/HistoryScreen';
 import { HistoryDetailScreen } from '../screens/HistoryDetailScreen';
 import { RootStackParamList } from './types';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
-import { WalletScreen } from '../screens/WalletScreen';
+import { MainTabs } from './MainTabs';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -28,36 +26,34 @@ export const AppNavigator = () => {
 
     const AuthNavigator = () => (
         <Stack.Navigator
-            initialRouteName={"Onboarding"}
+            initialRouteName="Onboarding"
             screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: '#FFFFFF' }
+                contentStyle: { backgroundColor: '#FFFFFF' },
             }}
         >
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
         </Stack.Navigator>
-    )
+    );
 
-    const AppNavigator = () => (
+    const LoggedInStack = () => (
         <Stack.Navigator
-            initialRouteName={"Home"}
+            initialRouteName="MainTabs"
             screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: '#FFFFFF' }
+                contentStyle: { backgroundColor: '#FFFFFF' },
             }}
         >
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="History" component={HistoryScreen} />
+            <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
-            <Stack.Screen name="Wallet" component={WalletScreen} />
         </Stack.Navigator>
-    )
+    );
 
     return (
         <NavigationContainer>
-            {token ? <AppNavigator /> : <AuthNavigator />}
+            {token ? <LoggedInStack /> : <AuthNavigator />}
         </NavigationContainer>
     );
 };

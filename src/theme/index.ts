@@ -5,6 +5,7 @@ export const theme = {
         background: '#FFFFFF',
         text: '#202020ff',
         textSecondary: '#000000ff',
+        inactiveTab: '#666666',
         inputBackground: '#F1F1F1',
         error: '#D00000',
         white: '#FFFFFF',

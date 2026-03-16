@@ -69,4 +69,8 @@ api.interceptors.response.use(
     }
 );
 
+export const getActiveRequest = () => api.get('/rides/active-request').then(r => r.data);
+export const getCurrentRide = () => api.get('/rides/current').then(r => r.data);
+export const acceptOfferApi = (offerId: string) => api.post(`/rides/offers/${offerId}/accept`).then(r => r.data);
+
 export default api;

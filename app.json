@@ -19,7 +19,7 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "config": {
-        "googleMapsApiKey": ""
+        "googleMapsApiKey": "AIzaSyBmUgUONZ3YF8z7zjIFkVZe5MQpS13T7HA"
       }
     },
     "android": {
@@ -33,7 +33,7 @@
       "versionCode": 1,
       "config": {
         "googleMaps": {
-          "apiKey": ""
+          "apiKey": "AIzaSyBmUgUONZ3YF8z7zjIFkVZe5MQpS13T7HA"
         }
       }
     },

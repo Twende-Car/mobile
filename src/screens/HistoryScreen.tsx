@@ -1,36 +1,59 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import api from '../constants/api';
+import api, { getActiveRequest, acceptOfferApi } from '../constants/api';
+import { Button } from '../components/Button';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
 
 export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeRequest, setActiveRequest] = useState<{ ride: any; offers: Array<{ offer: any; driver: any }> } | null>(null);
+    const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
+
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            const [historyRes, activeRes] = await Promise.all([api.get('/rides/history'), getActiveRequest()]);
+            setHistory(historyRes.data);
+            setActiveRequest(activeRes && typeof activeRes === 'object' && 'ride' in activeRes ? activeRes as any : null);
+        } catch (error) {
+            console.log(error);
+            Alert.alert('Erreur', 'Impossible de récupérer l\'historique');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        async function fetchHistory() {
-            try {
-                const response = await api.get('/rides/history');
-                setHistory(response.data);
-            } catch (error) {
-                console.log(error);
-                Alert.alert('Erreur', 'Impossible de récupérer l’historique');
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchHistory();
+        loadData();
     }, []);
+
+    const handleAcceptOffer = async (offerId: string) => {
+        try {
+            setAcceptingOfferId(offerId);
+            const { ride, driver } = await acceptOfferApi(offerId);
+            setActiveRequest(null);
+            Alert.alert('Proposition acceptée', 'Vous pouvez maintenant lancer la course depuis l\'accueil.');
+            (navigation.getParent() as any)?.navigate('Home', { acceptedRide: ride, acceptedDriver: driver });
+        } catch (e: any) {
+            Alert.alert('Erreur', e.response?.data?.message || 'Impossible d\'accepter la proposition');
+        } finally {
+            setAcceptingOfferId(null);
+        }
+    };
 
     const renderItem = ({ item }: { item: any }) => (
         <TouchableOpacity
             style={styles.item}
-            onPress={() => navigation.navigate('HistoryDetail', { rideId: item.id })}
+            onPress={() => {
+                navigation.navigate('HistoryDetail', { rideId: item.id })
+            }}
         >
             <View style={styles.itemHeader}>
                 <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
@@ -50,10 +73,16 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
     );
 
+    const handleRefresh = () => {
+        setLoading(true);
+        loadData();
+        setLoading(false);
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()}>
+                <TouchableOpacity onPress={() => (navigation.getParent() as any)?.navigate('Home')}>
                     <Text style={styles.back}>➔</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>Historique</Text>
@@ -68,6 +97,33 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
                     renderItem={renderItem}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.list}
+                    refreshControl={<RefreshControl refreshing={loading} onRefresh={handleRefresh} />}
+                    ListHeaderComponent={
+                        activeRequest && activeRequest.offers?.length > 0 ? (
+                            <View style={styles.pendingSection}>
+                                <Text style={styles.pendingTitle}>Demande en attente</Text>
+                                <View style={styles.pendingCard}>
+                                    <Text style={styles.pendingRoute}>De: {activeRequest.ride.pickupAddress || `${activeRequest.ride.pickupLat?.toFixed(4)}, ${activeRequest.ride.pickupLng?.toFixed(4)}`}</Text>
+                                    <Text style={styles.pendingRoute}>Vers: {activeRequest.ride.dropoffAddress || `${activeRequest.ride.dropoffLat?.toFixed(4)}, ${activeRequest.ride.dropoffLng?.toFixed(4)}`}</Text>
+                                    <Text style={styles.offersLabel}>Propositions des chauffeurs ({activeRequest.offers.length})</Text>
+                                    {activeRequest.offers.map((item: any) => (
+                                        <View key={item.offer.id} style={styles.offerRow}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.offerDriverName}>{item.driver?.name || 'Chauffeur'}</Text>
+                                                <Text style={styles.offerMeta}>{item.driver?.vehicleModel} • {item.offer.price} Fc</Text>
+                                            </View>
+                                            <Button
+                                                title={acceptingOfferId === item.offer.id ? '...' : 'Accepter'}
+                                                onPress={() => handleAcceptOffer(item.offer.id)}
+                                                disabled={!!acceptingOfferId}
+                                                style={styles.acceptButton}
+                                            />
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        ) : null
+                    }
                     ListEmptyComponent={<Text style={styles.empty}>Aucun historique disponible</Text>}
                 />
             )}
@@ -155,5 +211,54 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 50,
         color: theme.colors.textSecondary,
-    }
+    },
+    pendingSection: {
+        marginBottom: theme.spacing.l,
+    },
+    pendingTitle: {
+        ...theme.textVariants.title,
+        fontSize: 16,
+        marginBottom: theme.spacing.s,
+        color: theme.colors.primary,
+    },
+    pendingCard: {
+        backgroundColor: theme.colors.white,
+        padding: theme.spacing.m,
+        borderRadius: theme.borderRadius.s,
+        borderWidth: 1,
+        borderColor: theme.colors.inputBackground,
+        borderLeftWidth: 4,
+        borderLeftColor: theme.colors.primary,
+    },
+    pendingRoute: {
+        ...theme.textVariants.body,
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    offersLabel: {
+        fontWeight: 'bold',
+        marginTop: theme.spacing.m,
+        marginBottom: theme.spacing.s,
+        fontSize: 13,
+    },
+    offerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.s,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.inputBackground,
+    },
+    offerDriverName: {
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    offerMeta: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    acceptButton: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        minWidth: 90,
+    },
 });

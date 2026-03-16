@@ -8,10 +8,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 import { Button } from '../components/Button';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import api, { API_URL } from '../constants/api';
+import api, { API_URL, getCurrentRide } from '../constants/api';
 import { GOOGLE_MAPS_API_KEY, CITIES } from '../constants/maps';
 import * as Speech from 'expo-speech';
 import * as Linking from 'expo-linking';
@@ -22,7 +23,7 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-export const HomeScreen: React.FC<Props> = ({ navigation }) => {
+export const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     const { socket, isConnected } = useSocket();
     const { user: authUser, logout } = useAuth();
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
@@ -30,6 +31,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const [pickup, setPickup] = useState('Position actuelle');
     const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
     const [destination, setDestination] = useState('');
+    const [showDriverDetailsModal, setShowDriverDetailsModal] = useState(false);
+    const [selectedDriver, setSelectedDriver] = useState<any>(null);
     const [destinationCoords, setDestinationCoords] = useState<{ latitude: number, longitude: number } | null>(null);
     //const [vehicleType, setVehicleType] = useState<'Voiture' | 'Moto' | 'Luxe'>('Voiture');
     //const [selectedDriver, setSelectedDriver] = useState<{ id: string, name: string } | null>(null);
@@ -193,13 +196,44 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         }
     }, [isConnected, userRole]);
 
+    // Restore state when coming from History after accepting an offer
+    useEffect(() => {
+        const params = route.params as { acceptedRide?: any; acceptedDriver?: any } | undefined;
+        if (params?.acceptedRide && authUser?.role === 'client') {
+            setCurrentRide(params.acceptedRide);
+            if (params.acceptedDriver) setDetailedDriver(params.acceptedDriver);
+            setRideOffers([]);
+            navigation.setParams({ acceptedRide: undefined, acceptedDriver: undefined });
+        }
+    }, [route.params, authUser?.role]);
+
+    // Restore current ride from API (after app error / reconnect) when client
+    useFocusEffect(
+        React.useCallback(() => {
+            if (authUser?.role !== 'client') return;
+            getCurrentRide()
+                .then((data: any) => {
+                    if (!data) return;
+                    if (data.ride && data.offers) {
+                        setCurrentRide(data.ride);
+                        setRideOffers(data.offers || []);
+                    } else if (data.ride && data.driver) {
+                        setCurrentRide(data.ride);
+                        setDetailedDriver(data.driver);
+                        setRideOffers([]);
+                    }
+                })
+                .catch(() => { });
+        }, [authUser?.role])
+    );
+
     const fetchPendingRides = async () => {
         try {
             const url = location
                 ? `/rides/available-rides?lat=${location.coords.latitude}&lng=${location.coords.longitude}`
                 : '/rides/available-rides';
             const response = await api.get(url);
-            console.log("Demandes disponibles", response.data);
+            //console.log("Demandes disponibles", response.data);
             setPendingRides(response.data);
         } catch (error) {
             console.error("Erreur lors de la récupération des demandes", error);
@@ -221,10 +255,19 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 }
             });
 
-            socket.on('rideRequested', (ride) => {
+            socket.on('rideRequested', (data: { ride: any, estimatedFare: number }) => {
+                const { ride, estimatedFare } = data;
                 setCurrentRide(ride);
                 setRideOffers([]);
                 setShowSelectionModal(false);
+                setEstimatedFare(estimatedFare);
+                fetchPendingRides();
+            });
+
+            socket.on('errorRideRequest', (data: { message?: string }) => {
+                if (data?.message) {
+                    Alert.alert("Erreur", data.message);
+                }
             });
 
             socket.on('newOffer', (data) => {
@@ -418,21 +461,38 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 vehicleTypeId: selectedVehicleType?.id,
                 passengerName: authUser?.name,
                 passengerPhone: authUser?.phone,
+                estimatedFare: estimatedFare,
             });
             Alert.alert("Succès", "Demande envoyée. Attente des offres des chauffeurs...");
         }
     };
 
     const handleAcceptOffer = (offerId: string) => {
+        console.log(socket)
         if (socket) {
+            alert("EMIT!!!")
             socket.emit('acceptOffer', { offerId });
         }
     };
 
-    const handleDriverAcceptRide = () => {
+    const handleDriverAcceptRide = async () => {
         if (!socket || !selectedRideForBid) return;
-        setAcceptingRideId(selectedRideForBid.id);
-        socket.emit('driverAcceptRide', { rideId: selectedRideForBid.id });
+        console.log('handleDriverAcceptRide', estimatedFare);
+        let bidEstimatedFare = estimatedFare;
+        if(!bidEstimatedFare || bidEstimatedFare <= 0) {
+            const response = await api.post('/rides/estimate', {
+                distance: selectedRideForBid.distance, // We could calculate real distance here if needed
+                vehicleTypeId: selectedRideForBid.vehicleTypeId
+            });
+            bidEstimatedFare = response.data.fare;
+        }
+        socket.emit('submitOffer', {
+            rideId: selectedRideForBid.id,
+            price: Number(bidEstimatedFare)
+        });
+
+        //setAcceptingRideId(selectedRideForBid.id);
+        //socket.emit('driverAcceptRide', { rideId: selectedRideForBid.id });
         setPendingRides(prev => prev.filter(r => r.id !== selectedRideForBid.id));
         setShowBidModal(false);
         setSelectedRideForBid(null);
@@ -526,36 +586,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}>
-            <View style={styles.roleToggle}>
-                {userRole === 'client' && <Text
-                    style={[styles.roleBtn, userRole === 'client' && styles.roleBtnActive]}
-                    onPress={() => setUserRole('client')}
-                >Accueil</Text>}
-                {userRole === 'driver' && <Text
-                    style={[styles.roleBtn, userRole === 'driver' && styles.roleBtnActive]}
-                    onPress={() => setUserRole('driver')}
-                >Accueil</Text>}
-                <TouchableOpacity
-                    style={styles.historyBtn}
-                    onPress={() => navigation.navigate('History')}
-                >
-                    <Text style={styles.historyText}>Hist.</Text>
-                </TouchableOpacity>
-                {userRole === 'driver' && (
-                    <TouchableOpacity
-                        style={[styles.historyBtn, { backgroundColor: theme.colors.primary }]}
-                        onPress={() => navigation.navigate('Wallet')}
-                    >
-                        <Text style={[styles.historyText, { color: 'white' }]}>W</Text>
-                    </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                    style={[styles.historyBtn, { backgroundColor: theme.colors.error }]}
-                    onPress={logout}
-                >
-                    <Text style={[styles.historyText, { color: 'white' }]}>Déconnexion</Text>
-                </TouchableOpacity>
-            </View>
+
 
             {userRole === 'driver' && currentRide && currentRide.status === 'IN_PROGRESS' && navigationSteps.length > 0 && (
                 <View style={styles.navHeader}>
@@ -693,7 +724,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                         strictbounds: true,
                                     }}
                                     fetchDetails={true}
-                                    onFail={(err) => console.log("Error: "  + err)}
+                                    onFail={(err) => console.log("Error: " + err)}
                                     styles={{
                                         textInput: styles.input,
                                         container: { flex: 0 },
@@ -727,7 +758,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                         strictbounds: true,
                                     }}
                                     fetchDetails={true}
-                                    onFail={(err) => console.log("Error: "  + err)}
+                                    onFail={(err) => console.log("Error: " + err)}
                                     styles={{
                                         textInput: styles.input,
                                         container: { flex: 0 },
@@ -755,13 +786,21 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                                 ) : (
                                     rideOffers.map((item, idx) => (
                                         <View key={idx} style={styles.rideItem}>
-                                            <View style={{ flex: 1 }}>
+                                            <TouchableOpacity 
+                                                onPress={() => {
+                                                    //display driver details modal
+                                                    console.log("Selected Driver: ", item.driver);
+                                                    setShowDriverDetailsModal(true);
+                                                    setSelectedDriver(item.driver);
+                                                }}
+                                                style={{ flex: 1 }}>
                                                 <Text style={{ fontWeight: 'bold' }}>{item.driver.name}</Text>
                                                 <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
                                                     {item.driver.vehicleModel} • ⭐ {item.driver.rating}
                                                 </Text>
-                                            </View>
-                                            <Text style={styles.fareText}>{item.offer.price}Fc</Text>
+                                                <Text style={styles.fareText}>{item.offer.price}Fc</Text>
+                                            </TouchableOpacity>
+                                            
                                             <Button
                                                 title="Accepter"
                                                 onPress={() => handleAcceptOffer(item.offer.id)}
@@ -885,9 +924,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         ) : (
                             estimatedFare && (
                                 <View style={styles.fareContainer}>
-                                    <Text style={styles.fareText}>Estimation: {estimatedFare.toFixed(0)}Fc</Text>
+                                    <Text style={styles.fareText}>Tarification: {estimatedFare.toFixed(0)}Fc</Text>
                                     <Text style={styles.disclaimerText}>
-                                        Attention : les prix réels peuvent différer suivant la proposition faite par le Driver.
+                                        Attention : les prix réels peuvent différer suivant la durée réelle de la course
                                     </Text>
                                 </View>
                             )
@@ -911,7 +950,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                             <Text style={styles.detailRow}><Text style={styles.detailLabel}>Départ:</Text> {selectedRideForBid.pickupAddress || `${selectedRideForBid.pickupLat?.toFixed(5)}, ${selectedRideForBid.pickupLng?.toFixed(5)}`}</Text>
                             <Text style={styles.detailRow}><Text style={styles.detailLabel}>Arrivée:</Text> {selectedRideForBid.dropoffAddress || `${selectedRideForBid.dropoffLat?.toFixed(5)}, ${selectedRideForBid.dropoffLng?.toFixed(5)}`}</Text>
                             {(selectedRideForBid.distanceToPickup != null) && (
-                                <Text style={styles.detailRow}><Text style={styles.detailLabel}>Distance (vers vous):</Text> {selectedRideForBid.distanceToPickup.toFixed(1)} km</Text>
+                                <Text style={styles.detailRow}><Text style={styles.detailLabel}>Distance:</Text> {selectedRideForBid.distanceToPickup.toFixed(1)} km</Text>
                             )}
                         </View>
 
@@ -934,27 +973,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
             )}
 
-            {/* Bid Modal (client flow: passenger sees offers; driver bid flow kept if needed elsewhere) */}
-            {showBidModal && selectedRideForBid && userRole === 'client' && (
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Proposer un prix</Text>
-                        <Text style={{ marginBottom: 10 }}>Vers: {selectedRideForBid?.dropoffAddress}</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Votre prix (Fc)"
-                            keyboardType="numeric"
-                            autoFocus
-                            value={bidPrice}
-                            onChangeText={setBidPrice}
-                        />
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <Button title="Annuler" variant="outline" onPress={() => setShowBidModal(false)} style={{ flex: 1 }} />
-                            <Button title="Envoyer" onPress={handleSubmitOffer} style={{ flex: 1 }} />
-                        </View>
-                    </View>
-                </View>
-            )}
+
 
             {/* Ride Summary Modal */}
             {rideSummary && (
@@ -978,6 +997,42 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         <Button
                             title="Terminer"
                             onPress={handleDismissSummary}
+                            style={{ marginTop: 20 }}
+                        />
+                    </View>
+                </View>
+            )}
+
+            {/* Driver Details Modal */}
+            {showDriverDetailsModal && selectedDriver && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Détails du chauffeur</Text>
+                        <View style={styles.detailCard}>
+                            <Text style={styles.detailRow}><Text style={styles.detailLabel}>Nom:</Text> {selectedDriver.name}</Text>
+                            <Text style={styles.detailRow}><Text style={styles.detailLabel}>Véhicule:</Text> {selectedDriver.vehicleModel}</Text>
+                            <Text style={styles.detailRow}><Text style={styles.detailLabel}>Couleur:</Text> {selectedDriver.vehicleColor}</Text>
+                            <Text style={styles.detailRow}><Text style={styles.detailLabel}>Immatriculation:</Text> {selectedDriver.vehiclePlate}</Text>
+                        </View>
+                        {/* vehicule photo */}
+                        {selectedDriver.vehiclePhoto && (
+                            <Image
+                                source={{ uri: `${API_URL}/${selectedDriver.vehiclePhoto}` }}
+                                style={styles.vehicleThumbnail}
+                            />
+                        )}
+                        {/* contact button */}
+                        {selectedDriver.phoneNumber && (
+                            <Button
+                                title="Contacter sur WhatsApp"
+                                onPress={() => handleOpenWhatsApp(selectedDriver.phoneNumber)}
+                                style={{ marginTop: 20 }}
+                            />
+                        )}
+                        <Button
+                            title="Fermer"
+                            variant="outline"
+                            onPress={() => setShowDriverDetailsModal(false)}
                             style={{ marginTop: 20 }}
                         />
                     </View>
@@ -1075,18 +1130,6 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.primary,
         color: theme.colors.white
     },
-    historyBtn: {
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-        borderRadius: theme.borderRadius.round,
-        backgroundColor: theme.colors.secondary,
-        marginLeft: 5,
-    },
-    historyText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: theme.colors.primary,
-    },
     map: {
         width: Dimensions.get('window').width,
         height: Dimensions.get('window').height,
@@ -1164,7 +1207,7 @@ const styles = StyleSheet.create({
         marginBottom: 8
     },
     disclaimerText: {
-        fontSize: 12,
+        fontSize: 10,
         color: theme.colors.textSecondary,
         textAlign: 'center',
         fontStyle: 'italic',
